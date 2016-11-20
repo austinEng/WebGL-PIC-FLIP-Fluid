@@ -15,7 +15,7 @@ export default function(shouldUpdate, update) {
     lastTime = total;
 
     execStats.begin()
-    update()
+    update(elapsed)
     execStats.end()
 
     if (shouldUpdate()) {

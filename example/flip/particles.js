@@ -26,39 +26,96 @@ function Particle(i, buffer) {
   return particle
 }
 
-export function ParticleBuffer() {
-  var particles = []
+export function _ParticleBuffer(gl) {
+  return function ParticleBuffer() {
+    var particles = []
 
-  var particleBuffer
-  
-  particleBuffer = {
-    addRegion: region => {
-      region.particleIterator((x, y, z) => {
-        particles.push(x)
-        particles.push(y)
-        particles.push(z)
-        particles.push(1)
-        particles.push(1)
-        particles.push(1)
-      })
-    },
+    var particleBuffer
+    
+    particleBuffer = {
+      addRegion: region => {
+        region.particleIterator((x, y, z) => {
+          particles.push(x)
+          particles.push(y)
+          particles.push(z)
+          particles.push(0.0001*(Math.random() - 0.5))
+          particles.push(0.0001*(Math.random() - 0.5))
+          particles.push(0.0001*(Math.random() - 0.5))
+        })
+      },
 
-    create: () => {
-      particleBuffer.buffer = Float32Array.from(particles)
-    },
+      create: () => {
+        // particleBuffer.buffer = Float32Array.from(particles)
 
-    particle: i => {
-      return Particle(i, particleBuffer.buffer)
-    },
+        var minPixels = particles.length / 3
+        particleBuffer.textureLength = Math.pow(2, Math.ceil(Math.log2(Math.ceil(Math.sqrt(minPixels)))))
 
-    get length() {
-      return particleBuffer.buffer.length / ATTRIB_COUNT
-    },
+        var ids = new Float32Array(particleBuffer.length);
+        particleBuffer.buffer = new Float32Array(3*particleBuffer.textureLength * particleBuffer.textureLength)
+        for (let i = 0; i < particles.length; ++i) {
+          particleBuffer.buffer[i] = particles[i]
+          ids[i] = i
+        }
 
-    buffer: null
+        particleBuffer.A = {
+          tex: gl.createTexture(),
+          fbo: gl.createFramebuffer()
+        }
+
+        particleBuffer.B = {
+          tex: gl.createTexture(),
+          fbo: gl.createFramebuffer()
+        }
+
+        gl.bindTexture(gl.TEXTURE_2D, particleBuffer.A.tex)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, particleBuffer.textureLength, particleBuffer.textureLength, 0, gl.RGB, gl.FLOAT, particleBuffer.buffer)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+        gl.bindTexture(gl.TEXTURE_2D, null)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, particleBuffer.A.fbo)
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, particleBuffer.A.tex, 0)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+        gl.bindTexture(gl.TEXTURE_2D, particleBuffer.B.tex)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, particleBuffer.textureLength, particleBuffer.textureLength, 0, gl.RGB, gl.FLOAT, particleBuffer.buffer)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+        gl.bindTexture(gl.TEXTURE_2D, null)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, particleBuffer.B.fbo)
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, particleBuffer.B.tex, 0)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+        particleBuffer.ids = gl.createBuffer()
+        gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer.ids)
+        gl.bufferData(gl.ARRAY_BUFFER, ids, gl.STATIC_DRAW)
+        gl.bindBuffer(gl.ARRAY_BUFFER, null)
+
+        console.log(`Created ${particles.length / ATTRIB_COUNT} particles`)
+      },
+
+      particle: i => {
+        return Particle(i, particleBuffer.buffer)
+      },
+
+      get length() {
+        return particles.length / ATTRIB_COUNT
+      },
+
+      swap() {
+        var temp = particleBuffer.A
+        particleBuffer.A = particleBuffer.B
+        particleBuffer.B = temp
+      },
+
+      buffer: null
+    }
+
+    return particleBuffer
   }
-
-  return particleBuffer
 }
 
 class ParticleRegion {

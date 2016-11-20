@@ -1,7 +1,7 @@
 'use strict'
 
 import _Compute from '../../lib'
-import {ParticleBuffer, BoxRegion} from './particles'
+import {_ParticleBuffer, BoxRegion} from './particles'
 import _MAC from './grid'
 import Bound from './bound'
 import Renderer from './renderer'
@@ -12,9 +12,11 @@ import _Sim from './sim'
 const canvas = document.getElementById("canvas");
 
 const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
+gl.getExtension("OES_texture_float")
 
 const {ParticlePainter} = Painters(gl)
 
+const ParticleBuffer = _ParticleBuffer(gl)
 const {ComputeBuffer, Computation} = _Compute(gl)
 const {MACGrid} = _MAC(gl)
 const {Sim} = _Sim(gl)
@@ -34,7 +36,7 @@ var c2 = new Computation(incr, ComputeBuffer.TEXTURE, ComputeBuffer.TEXTURE)*/
 // var Grid = new MAC(new Bound(-1, 1, -1, 1, -1, 1), 0.1)
 // console.log(Grid)
 
-var DENSITY = 1000 // particles per cubic meter
+var DENSITY = 1000000 // particles per cubic meter
 var CELL_SIZE = 2 / Math.cbrt(DENSITY) // ~8 particles per cell
 
 var box = new BoxRegion(DENSITY, new Bound({
@@ -55,18 +57,24 @@ var grid = new MACGrid(new Bound({
 
 var devParticles = new ComputeBuffer(particles.buffer, ComputeBuffer.ARRAY)
 
-var sim = Sim(grid, devParticles)
-console.log(sim)
+var sim = Sim(grid, particles)
 
 var renderer = Renderer(gl);
-renderer.add(ParticlePainter(devParticles))
+renderer.add(ParticlePainter(particles))
 
 var drawloop = Loop(
   () => {
     return true//renderer.isDirty()
   },
-  () => {
-    sim.step()
+  (t) => {
+    sim.step(t)
+    // gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    // gl.enable(gl.DEPTH_TEST)
+    // gl.disable(gl.BLEND)
+    // gl.clearColor(0.2, 0.2, 0.2, 1.0)
+    gl.enable(gl.DEPTH_TEST)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.viewport(0, 0, canvas.width, canvas.height)
     renderer.draw()
   }  
 )

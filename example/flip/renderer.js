@@ -31,13 +31,12 @@ export default function Renderer(gl) {
     
     camera = Camera(canvas)
     camera.position.set(1, 1, 1);
-    gl.clearColor(0.2, 0.2, 0.2, 1.0)
   }
   
   var cameraMat = new THREE.Matrix4();
   function draw() {
     camera.controls.update()
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+    // gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
     camera.updateMatrixWorld();
     camera.matrixWorldInverse.getInverse(camera.matrixWorld);
