@@ -30,13 +30,13 @@ function Painters(gl) {
           
           gl.uniformMatrix4fv(u_viewProj, false, state.cameraMat.elements);
 
-          gl.enableVertexAttribArray(v_pos)
-          gl.enableVertexAttribArray(v_vel)
+          if (v_pos >= 0) gl.enableVertexAttribArray(v_pos)
+          if (v_vel >= 0) gl.enableVertexAttribArray(v_vel)
                     
           gl.drawArrays(gl.POINTS, 0, particles.length / 6)
 
-          gl.disableVertexAttribArray(v_pos)
-          gl.disableVertexAttribArray(v_vel)
+          if (v_pos >= 0) gl.disableVertexAttribArray(v_pos)
+          if (v_vel >= 0) gl.disableVertexAttribArray(v_vel)
         }
 
         return {

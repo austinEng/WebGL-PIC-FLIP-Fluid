@@ -7,7 +7,7 @@ attribute vec3 v_vel;
 varying vec3 f_col;
 
 void main() {
-    f_col = v_vel;
+    f_col = v_pos + vec3(0.5, 0.5, 0.5);
     gl_Position = u_viewProj * vec4(v_pos, 1.0);
     gl_PointSize = 3.0;
 }

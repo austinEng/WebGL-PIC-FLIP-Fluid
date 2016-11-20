@@ -19,6 +19,7 @@ export default function(shouldUpdate, update) {
     execStats.end()
 
     if (shouldUpdate()) {
+      running = true
       frameRequest = requestAnimationFrame(tick)
       frameStats.begin()
     } else {
@@ -27,9 +28,11 @@ export default function(shouldUpdate, update) {
   }
 
   function start() {
-    lastTime = 0
-    frameStats.begin()
-    tick(0)
+    if (!running) {
+      lastTime = 0
+      frameStats.begin()
+      tick(0)
+    }
   }
   
   return {
@@ -39,6 +42,7 @@ export default function(shouldUpdate, update) {
         frameRequest = requestAnimationFrame(tick)
       }
     },
+    start: start,
     execStats,
     frameStats
   }

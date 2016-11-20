@@ -31,10 +31,10 @@ var c2 = new Computation(incr, ComputeBuffer.TEXTURE, ComputeBuffer.TEXTURE)*/
 // var Grid = new MAC(new Bound(-1, 1, -1, 1, -1, 1), 0.1)
 // console.log(Grid)
 
-var box = new BoxRegion(100, new Bound({
-  minX: -0.1, maxX: 0.1,
-  minY: -0.1, maxY: 0.1,
-  minZ: -0.1, maxZ: 0.1
+var box = new BoxRegion(10, new Bound({
+  minX: -0.5, maxX: 0.5,
+  minY: -0.5, maxY: 0.5,
+  minZ: -0.5, maxZ: 0.5
 }))
 console.log(box)
 var particles = new ParticleBuffer()
@@ -68,5 +68,13 @@ drawloop.execStats.domElement.style.top = '48px';
 document.body.appendChild(drawloop.execStats.domElement)
 
 renderer.ready.then(() => {
-  drawloop.tick()
+  drawloop.start()
+
+  renderer.camera.controls.addEventListener('change', e => {
+    drawloop.start()
+  })
+
+  window.addEventListener('resize', e => {
+    drawloop.start()
+  })
 })

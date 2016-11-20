@@ -4,7 +4,7 @@ const THREE = require('three')
 const OrbitControls = require('three-orbit-controls')(THREE)
 
 function Camera(canvas) {
-  var camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 );
+  var camera = new THREE.PerspectiveCamera( 75, canvas.width / canvas.height, 0.1, 1000 );
 
   var controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
@@ -16,10 +16,13 @@ function Camera(canvas) {
 
   console.log(controls)
 
-  window.addEventListener('resize', e => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+  var setSize = (e) => {
+    camera.aspect = canvas.width / canvas.height;
     camera.updateProjectionMatrix();
-  }, false);
+    controls.update()
+  }
+  window.addEventListener('resize', setSize);
+  window.addEventListener('load', setSize)
 
   camera.controls = controls
   return camera
@@ -35,8 +38,9 @@ export default function Renderer(gl) {
   function setup() {
     webgl2Enabled = window.WebGL2RenderingContext && (gl instanceof window.WebGL2RenderingContext)
     if (!webgl2Enabled) console.warn("WebGL 2 not supported. Falling back to WebGL 1")
-
+    
     camera = Camera(canvas)
+    camera.position.set(1, 1, 1);
     gl.clearColor(0.2, 0.2, 0.2, 1.0)
   }
   
@@ -48,7 +52,6 @@ export default function Renderer(gl) {
     camera.updateMatrixWorld();
     camera.matrixWorldInverse.getInverse(camera.matrixWorld);
     
-    // console.log(camera.matrixWorld.elements)
     cameraMat.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     
     for (let i = 0; i < drawables.length; ++i) {
@@ -61,7 +64,7 @@ export default function Renderer(gl) {
   }
 
   function isDirty() {
-    return true
+    return false
   }
 
   function add(painter) {
@@ -69,15 +72,15 @@ export default function Renderer(gl) {
   }
 
   function resize() {
-    canvas.style.width = window.innerWidth
-    canvas.style.height = window.innerHeight
     canvas.width = window.innerWidth
     canvas.height = window.innerHeight
+    gl.viewport(0, 0 , canvas.width, canvas.height)
   }
 
   window.addEventListener('load', e => {
-    resize()
     setup()
+    resize()
+    console.log(window.innerWidth, window.innerHeight)
     rendererReady()
   })
 
@@ -89,6 +92,7 @@ export default function Renderer(gl) {
     add,
     ready: new Promise((resolve, reject) => {
       rendererReady = resolve
-    })    
+    }),
+    get camera() { return camera }
   }
 }
