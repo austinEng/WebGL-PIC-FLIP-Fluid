@@ -2,11 +2,12 @@
 
 import _Compute from '../../lib'
 import {ParticleBuffer, BoxRegion} from './particles'
-import MAC from './grid'
+import _MAC from './grid'
 import Bound from './bound'
 import Renderer from './renderer'
 import Loop from './loop'
 import Painters from './painter'
+import _Sim from './sim'
 
 const canvas = document.getElementById("canvas");
 
@@ -15,6 +16,8 @@ const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
 const {ParticlePainter} = Painters(gl)
 
 const {ComputeBuffer, Computation} = _Compute(gl)
+const {MACGrid} = _MAC(gl)
+const {Sim} = _Sim(gl)
 
 /*var bufA = ComputeBuffer(new Float32Array([1,2,3,4,5]), ComputeBuffer.ARRAY)
 var bufB = ComputeBuffer(new Float32Array([2,2,2,3,3]), ComputeBuffer.ARRAY)
@@ -31,7 +34,10 @@ var c2 = new Computation(incr, ComputeBuffer.TEXTURE, ComputeBuffer.TEXTURE)*/
 // var Grid = new MAC(new Bound(-1, 1, -1, 1, -1, 1), 0.1)
 // console.log(Grid)
 
-var box = new BoxRegion(10, new Bound({
+var DENSITY = 1000 // particles per cubic meter
+var CELL_SIZE = 2 / Math.cbrt(DENSITY) // ~8 particles per cell
+
+var box = new BoxRegion(DENSITY, new Bound({
   minX: -0.5, maxX: 0.5,
   minY: -0.5, maxY: 0.5,
   minZ: -0.5, maxZ: 0.5
@@ -41,16 +47,26 @@ var particles = new ParticleBuffer()
 particles.addRegion(box)
 particles.create()
 
+var grid = new MACGrid(new Bound({
+  minX: -0.5, maxX: 0.5,
+  minY: -0.5, maxY: 0.5,
+  minZ: -0.5, maxZ: 0.5
+}), CELL_SIZE)
+
 var devParticles = new ComputeBuffer(particles.buffer, ComputeBuffer.ARRAY)
+
+var sim = Sim(grid, devParticles)
+console.log(sim)
 
 var renderer = Renderer(gl);
 renderer.add(ParticlePainter(devParticles))
 
 var drawloop = Loop(
   () => {
-    return renderer.isDirty()
+    return true//renderer.isDirty()
   },
   () => {
+    sim.step()
     renderer.draw()
   }  
 )

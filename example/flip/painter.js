@@ -21,8 +21,8 @@ function Painters(gl) {
       ParticlePainter = function(particles) {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, particles.buffer)
-        gl.vertexAttribPointer(v_pos, 3, gl.FLOAT, false, 32 / 8 * 6, 0)
-        gl.vertexAttribPointer(v_vel, 3, gl.FLOAT, false, 32 / 8 * 6, 32 / 8 * 6)
+        if (v_pos >= 0) gl.vertexAttribPointer(v_pos, 3, gl.FLOAT, false, 32 / 8 * 6, 0)
+        if (v_vel >= 0) gl.vertexAttribPointer(v_vel, 3, gl.FLOAT, false, 32 / 8 * 6, 32 / 8 * 6)
 
         function draw(state) {
           gl.useProgram(particleProg)

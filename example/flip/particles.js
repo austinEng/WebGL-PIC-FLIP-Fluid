@@ -74,9 +74,10 @@ export class BoxRegion extends ParticleRegion {
   }
 
   particleIterator(cb) {
-    for (let x = this.bound.minX; x < this.bound.maxX; x += 1 / this.density) {
-      for (let y = this.bound.minY; y < this.bound.maxY; y += 1 / this.density) {
-        for (let z = this.bound.minZ; z < this.bound.maxZ; z += 1 / this.density) {
+    var length = 1 / Math.cbrt(this.density)
+    for (let x = this.bound.minX; x < this.bound.maxX; x += length) {
+      for (let y = this.bound.minY; y < this.bound.maxY; y += length) {
+        for (let z = this.bound.minZ; z < this.bound.maxZ; z += length) {
           cb(x, y, z)
         }
       }
