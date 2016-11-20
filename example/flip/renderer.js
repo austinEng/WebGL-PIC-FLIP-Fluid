@@ -14,16 +14,6 @@ function Camera(canvas) {
   controls.zoomSpeed = 1.0;
   controls.panSpeed = 2.0;
 
-  console.log(controls)
-
-  var setSize = (e) => {
-    camera.aspect = canvas.width / canvas.height;
-    camera.updateProjectionMatrix();
-    controls.update()
-  }
-  window.addEventListener('resize', setSize);
-  window.addEventListener('load', setSize)
-
   camera.controls = controls
   return camera
 }
@@ -74,13 +64,14 @@ export default function Renderer(gl) {
   function resize() {
     canvas.width = window.innerWidth
     canvas.height = window.innerHeight
+    camera.aspect = canvas.width / canvas.height;
+    camera.updateProjectionMatrix();
     gl.viewport(0, 0 , canvas.width, canvas.height)
   }
 
   window.addEventListener('load', e => {
     setup()
     resize()
-    console.log(window.innerWidth, window.innerHeight)
     rendererReady()
   })
 
