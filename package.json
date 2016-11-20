@@ -8,6 +8,13 @@
     "babel-loader": "^6.2.7",
     "babel-preset-es2015": "^6.18.0",
     "webpack": "^1.13.3",
-    "webpack-dev-server": "^1.16.2"
+    "webpack-dev-server": "^1.16.2",
+    "webpack-glsl-loader": "^1.0.1"
+  },
+  "dependencies": {
+    "gl-matrix": "^2.3.2",
+    "stats-js": "^1.0.0-alpha1",
+    "three": "^0.82.1",
+    "three-orbit-controls": "^72.0.0"
   }
 }
