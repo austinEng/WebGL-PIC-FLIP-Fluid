@@ -11,3 +11,6 @@ For particle attribute updates, most work so far is in the vertex shader. Applyi
 
 ![](img/movement.gif)
 ![](img/gravity.gif)
+
+Here's an interesting blooper. I currently have no pressure solve so nothing prevents the particles from going out of bounds. If that happens, they do really weird things.
+![](img/outsideGrid.gif)
