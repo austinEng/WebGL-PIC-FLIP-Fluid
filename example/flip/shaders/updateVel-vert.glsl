@@ -94,7 +94,7 @@ void main() {
             interolateOnGrid(u_gB, 2, pos)
         );
 
-        val = vel + 0.001*(velB - velA);
+        val = 0.95 * (vel + (velA - velB)) + 0.05 * velA;
 
         gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);
     }

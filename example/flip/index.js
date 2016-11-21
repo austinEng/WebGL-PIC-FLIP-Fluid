@@ -13,7 +13,6 @@ const canvas = document.getElementById("canvas");
 
 const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
 const ext_tex_float = gl.getExtension("OES_texture_float")
-if (!ext_tex_float) console.warn("OES_texture_float not supported!")
 
 const {ParticlePainter} = Painters(gl)
 
@@ -68,7 +67,7 @@ var drawloop = Loop(
     return true//renderer.isDirty()
   },
   (t) => {
-    sim.step(t)
+    sim.step(10 / 60)
     // gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     // gl.enable(gl.DEPTH_TEST)
     // gl.disable(gl.BLEND)

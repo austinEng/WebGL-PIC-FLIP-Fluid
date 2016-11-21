@@ -39,9 +39,9 @@ export function _ParticleBuffer(gl) {
           particles.push(y)
           particles.push(z)
           particles.push(0) // filler
-          particles.push(0.0001*(Math.random() - 0.5))
-          particles.push(0.0001*(Math.random() - 0.5))
-          particles.push(0.0001*(Math.random() - 0.5))
+          particles.push(0)
+          particles.push(0)
+          particles.push(0)
           particles.push(0) // filler
         })
       },
