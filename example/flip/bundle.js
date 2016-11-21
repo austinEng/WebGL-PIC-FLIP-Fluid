@@ -72,7 +72,7 @@
 	
 	var _painter2 = _interopRequireDefault(_painter);
 	
-	var _sim = __webpack_require__(26);
+	var _sim = __webpack_require__(28);
 	
 	var _sim2 = _interopRequireDefault(_sim);
 	
@@ -113,7 +113,7 @@
 	// var Grid = new MAC(new Bound(-1, 1, -1, 1, -1, 1), 0.1)
 	// console.log(Grid)
 	
-	var DENSITY = 1000000; // particles per cubic meter
+	var DENSITY = 500000; // particles per cubic meter
 	var CELL_SIZE = 2 / Math.cbrt(DENSITY); // ~8 particles per cell
 	
 	var box = new _particles.BoxRegion(DENSITY, new _bound2.default({
@@ -121,14 +121,13 @@
 	  minY: -0.5, maxY: 0.5,
 	  minZ: -0.5, maxZ: 0.5
 	}));
-	console.log(box);
 	var particles = new ParticleBuffer();
 	particles.addRegion(box);
 	particles.create();
 	
 	var grid = new MACGrid(new _bound2.default({
 	  minX: -0.5, maxX: 0.5,
-	  minY: -0.5, maxY: 0.5,
+	  minY: -0.5, maxY: 0.6,
 	  minZ: -0.5, maxZ: 0.5
 	}), CELL_SIZE);
 	
@@ -334,16 +333,15 @@
 	      /*let pixelsPerElement = data.BYTES_PER_ELEMENT / 4
 	      let minPixels = pixelsPerElement * data.length
 	      this.textureLength = Math.pow(2, Math.ceil(Math.log2(Math.ceil(Math.sqrt(minPixels)))))
-	        this.hostData = new data.constructor(this.textureLength * this.textureLength / pixelsPerElement)
+	       this.hostData = new data.constructor(this.textureLength * this.textureLength / pixelsPerElement)
 	      this.hostData.set(data)
-	        this.bytesPerElement = this.hostData.BYTES_PER_ELEMENT
-	        this.bufferView = new Uint8Array(this.hostData.buffer)
+	       this.bytesPerElement = this.hostData.BYTES_PER_ELEMENT
+	       this.bufferView = new Uint8Array(this.hostData.buffer)
 	      this.bufferLength = this.bufferView.byteLength
-	      
-	      // console.log(data)
+	            // console.log(data)
 	      // console.log(this.hostData)
 	      // console.log(this.bufferView)
-	        gl.bindTexture(gl.TEXTURE_2D, this.texture)
+	       gl.bindTexture(gl.TEXTURE_2D, this.texture)
 	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.bufferView)*/
 	    }
 	
@@ -574,9 +572,9 @@
 	          particles.push(y);
 	          particles.push(z);
 	          particles.push(0); // filler
-	          particles.push(0);
-	          particles.push(0);
-	          particles.push(0);
+	          particles.push(0.01 * (Math.random() - 0.5));
+	          particles.push(0.1 * (Math.random() - 0.5));
+	          particles.push(0.01 * (Math.random() - 0.5));
 	          particles.push(0); // filler
 	        });
 	      },
@@ -51029,63 +51027,104 @@
 	      getShader = _require.getShader,
 	      addShaders = _require.addShaders;
 	
-	  var particleProg = gl.createProgram();
-	
 	  var ParticlePainter;
+	  var GridPainter;
 	
 	  (function () {
-	    var particleVS = getShader(__webpack_require__(24), gl.VERTEX_SHADER);
-	    var particleFS = getShader(__webpack_require__(25), gl.FRAGMENT_SHADER);
-	    addShaders(particleProg, [particleVS, particleFS]);
+	    var prog = gl.createProgram();
 	
-	    (function () {
-	      // var v_pos = gl.getAttribLocation(particleProg, "v_pos")
-	      var v_id = gl.getAttribLocation(particleProg, "v_id");
-	      var u_particles = gl.getUniformLocation(particleProg, "u_particles");
-	      var u_texLength = gl.getUniformLocation(particleProg, "u_texLength");
-	      var u_viewProj = gl.getUniformLocation(particleProg, "u_viewProj");
+	    var vs = getShader(__webpack_require__(24), gl.VERTEX_SHADER);
+	    var fs = getShader(__webpack_require__(25), gl.FRAGMENT_SHADER);
+	    addShaders(prog, [vs, fs]);
 	
-	      ParticlePainter = function ParticlePainter(particles) {
-	        function draw(state) {
-	          gl.useProgram(particleProg);
+	    var v_id = gl.getAttribLocation(prog, "v_id");
+	    var u_particles = gl.getUniformLocation(prog, "u_particles");
+	    var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	    var u_viewProj = gl.getUniformLocation(prog, "u_viewProj");
 	
-	          gl.activeTexture(gl.TEXTURE0);
-	          gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
-	          gl.uniform1i(u_particles, 0);
+	    ParticlePainter = function ParticlePainter(particles) {
+	      function draw(state) {
+	        gl.useProgram(prog);
 	
-	          gl.uniform1i(u_texLength, particles.textureLength);
+	        gl.activeTexture(gl.TEXTURE0);
+	        gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
+	        gl.uniform1i(u_particles, 0);
 	
-	          gl.uniformMatrix4fv(u_viewProj, false, state.cameraMat.elements);
+	        gl.uniform1i(u_texLength, particles.textureLength);
 	
-	          // if (v_pos >= 0) gl.enableVertexAttribArray(v_pos)
-	          // if (v_vel >= 0) gl.enableVertexAttribArray(v_vel)
+	        gl.uniformMatrix4fv(u_viewProj, false, state.cameraMat.elements);
 	
-	          // if (v_pos >= 0) gl.vertexAttribPointer(v_pos, 3, gl.FLOAT, false, 4 * 3 * 2, 0)
-	          // if (v_vel >= 0) gl.vertexAttribPointer(v_vel, 3, gl.FLOAT, false, 4 * 3 * 2, 4 * 3)
-	          // console.log(particles)
+	        // if (v_pos >= 0) gl.enableVertexAttribArray(v_pos)
+	        // if (v_vel >= 0) gl.enableVertexAttribArray(v_vel)
 	
-	          gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
-	          gl.enableVertexAttribArray(v_id);
-	          gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
-	          gl.drawArrays(gl.POINTS, 0, particles.length);
-	          // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, particles.elements)
-	          // gl.drawElements(gl.POINTS, particles.length, gl.UNSIGNED_BYTE, 0)
-	          gl.disableVertexAttribArray(v_id);
-	          // gl.drawArrays(gl.POINTS, 0, particles.length)
+	        // if (v_pos >= 0) gl.vertexAttribPointer(v_pos, 3, gl.FLOAT, false, 4 * 3 * 2, 0)
+	        // if (v_vel >= 0) gl.vertexAttribPointer(v_vel, 3, gl.FLOAT, false, 4 * 3 * 2, 4 * 3)
+	        // console.log(particles)
 	
-	          // if (v_pos >= 0) gl.disableVertexAttribArray(v_pos)
-	          // if (v_vel >= 0) gl.disableVertexAttribArray(v_vel)
-	        }
+	        gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
+	        gl.enableVertexAttribArray(v_id);
+	        gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	        gl.drawArrays(gl.POINTS, 0, particles.length);
+	        // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, particles.elements)
+	        // gl.drawElements(gl.POINTS, particles.length, gl.UNSIGNED_BYTE, 0)
+	        gl.disableVertexAttribArray(v_id);
+	        // gl.drawArrays(gl.POINTS, 0, particles.length)
 	
-	        return {
-	          draw: draw
-	        };
+	        // if (v_pos >= 0) gl.disableVertexAttribArray(v_pos)
+	        // if (v_vel >= 0) gl.disableVertexAttribArray(v_vel)
+	      }
+	
+	      return {
+	        draw: draw
 	      };
-	    })();
+	    };
+	  })();
+	
+	  (function () {
+	    var prog = gl.createProgram();
+	
+	    var vs = getShader(__webpack_require__(26), gl.VERTEX_SHADER);
+	    var fs = getShader(__webpack_require__(27), gl.FRAGMENT_SHADER);
+	    addShaders(prog, [vs, fs]);
+	
+	    var u_grid = gl.getUniformLocation(prog, "u_grid");
+	    var u_direction = gl.getUniformLocation(prog, "u_direction");
+	    var u_count = gl.getUniformLocation(prog, "u_count");
+	    var u_offset = gl.getUniformLocation(prog, "u_offset");
+	    var u_color = gl.getUniformLocation(prog, "u_color");
+	
+	    GridPainter = function GridPainter(grid) {
+	      function draw(state) {
+	        gl.useProgram(prog);
+	      }
+	
+	      function useX() {
+	        gl.useProgram(prog);
+	        gl.uniform3f(u_offset, 0, 0.5, 0.5);
+	      }
+	
+	      function useY() {
+	        gl.useProgram(prog);
+	        gl.uniform3f(u_offset, 0.5, 0, 0.5);
+	      }
+	
+	      function useZ() {
+	        gl.useProgram(prog);
+	        gl.uniform3f(u_offset, 0.5, 0.5, 0);
+	      }
+	
+	      return {
+	        draw: draw,
+	        useX: useX,
+	        useY: useY,
+	        useZ: useZ
+	      };
+	    };
 	  })();
 	
 	  return {
-	    ParticlePainter: ParticlePainter
+	    ParticlePainter: ParticlePainter,
+	    GridPainter: GridPainter
 	  };
 	}
 	
@@ -51133,402 +51172,419 @@
 /* 24 */
 /***/ function(module, exports) {
 
-	module.exports = "\r\nuniform mat4 u_viewProj;\r\n\r\n// attribute vec3 v_pos;\r\n// attribute vec3 v_vel;\r\nattribute float v_id;\r\nuniform sampler2D u_particles;\r\nuniform int u_texLength;\r\n\r\nvarying vec3 f_col;\r\n\r\nvoid main() {\r\n    int pIdx = int(v_id) * 2;\r\n    int vIdx = int(v_id) * 2 + 1;\r\n\r\n    int pV = pIdx / u_texLength;\r\n    int pU = pIdx - pV * u_texLength;\r\n\r\n    int vV = vIdx / u_texLength;\r\n    int vU = vIdx - vV * u_texLength;\r\n\r\n    vec2 pUV = (vec2(pU, pV) + 0.1) / float(u_texLength);\r\n    vec2 vUV = (vec2(vU, vV) + 0.1) / float(u_texLength);\r\n\r\n    vec3 v_pos = texture2D(u_particles, pUV).rgb;\r\n    vec3 v_vel = abs(texture2D(u_particles, vUV).rgb);\r\n\r\n    f_col = v_vel; // v_pos + vec3(0.5, 0.5, 0.5);\r\n    gl_Position = u_viewProj * vec4(v_pos, 1.0);\r\n    gl_PointSize = 1.0;\r\n}"
+	module.exports = "\nuniform mat4 u_viewProj;\n\n// attribute vec3 v_pos;\n// attribute vec3 v_vel;\nattribute float v_id;\nuniform sampler2D u_particles;\nuniform int u_texLength;\n\nvarying vec3 f_col;\n\nvoid main() {\n    int pIdx = int(v_id) * 2;\n    int vIdx = int(v_id) * 2 + 1;\n\n    int pV = pIdx / u_texLength;\n    int pU = pIdx - pV * u_texLength;\n\n    int vV = vIdx / u_texLength;\n    int vU = vIdx - vV * u_texLength;\n\n    vec2 pUV = (vec2(pU, pV) + 0.1) / float(u_texLength);\n    vec2 vUV = (vec2(vU, vV) + 0.1) / float(u_texLength);\n\n    vec3 v_pos = texture2D(u_particles, pUV).rgb;\n    vec3 v_vel = 10.0*abs(texture2D(u_particles, vUV).rgb);\n\n    f_col = v_vel; // v_pos + vec3(0.5, 0.5, 0.5);\n    gl_Position = u_viewProj * vec4(v_pos, 1.0);\n    gl_PointSize = 2.0;\n}"
 
 /***/ },
 /* 25 */
 /***/ function(module, exports) {
 
-	module.exports = "\r\nprecision mediump float;\r\n\r\nvarying vec3 f_col;\r\n\r\nvoid main() {\r\n  gl_FragColor = vec4(f_col, 1.0);\r\n}"
+	module.exports = "\nprecision mediump float;\n\nvarying vec3 f_col;\n\nvoid main() {\n  gl_FragColor = vec4(f_col, 1.0);\n}"
 
 /***/ },
 /* 26 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ function(module, exports) {
 
-	'use strict';
-	
-	Object.defineProperty(exports, "__esModule", {
-	                value: true
-	});
-	
-	exports.default = function (gl) {
-	                var _require = __webpack_require__(23)(gl),
-	                    getShader = _require.getShader,
-	                    addShaders = _require.addShaders;
-	
-	                var quad_vbo = function () {
-	                                var buffer = gl.createBuffer();
-	                                gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-	                                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0]), gl.STATIC_DRAW);
-	                                return buffer;
-	                }();
-	
-	                function Sim(grid, particles) {
-	
-	                                // var fbos = {
-	                                //     gU: gl.createFramebuffer(),
-	                                //     gV: gl.createFramebuffer(),
-	                                //     gW: gl.createFramebuffer(),
-	                                //     gU_old: gl.createFramebuffer(),
-	                                //     gV_old: gl.createFramebuffer(),
-	                                //     gW_old: gl.createFramebuffer(),
-	                                //     gP: gl.createFramebuffer(),
-	                                //     gType: gl.createFramebuffer()
-	                                // }
-	
-	                                // for (let fbo in fbos) {
-	                                //     gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[fbo])
-	                                //     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, grid[fbo].buffer.texture, 0)
-	                                // }
-	
-	                                // gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-	
-	                                var projectToGrid = function () {
-	                                                var prog = gl.createProgram();
-	
-	                                                var vs = getShader(__webpack_require__(27), gl.VERTEX_SHADER);
-	                                                var fs = getShader(__webpack_require__(28), gl.FRAGMENT_SHADER);
-	                                                addShaders(prog, [vs, fs]);
-	
-	                                                // var u_iter = gl.getUniformLocation(prog, "u_iter")
-	                                                var u_min = gl.getUniformLocation(prog, "u_min");
-	                                                var u_max = gl.getUniformLocation(prog, "u_max");
-	                                                var u_offset = gl.getUniformLocation(prog, "u_offset");
-	                                                var u_count = gl.getUniformLocation(prog, "u_count");
-	                                                var u_goffset = gl.getUniformLocation(prog, "u_goffset");
-	                                                var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
-	                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
-	                                                var u_g = gl.getUniformLocation(prog, "u_g");
-	
-	                                                var v_id = gl.getAttribLocation(prog, "v_id");
-	                                                var u_particles = gl.getUniformLocation(prog, "u_particles");
-	                                                var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
-	                                                // var v_pos = gl.getAttribLocation(prog, "v_pos")
-	                                                // var v_vel = gl.getAttribLocation(prog, "v_vel")
-	
-	                                                return function () {
-	                                                                gl.useProgram(prog);
-	                                                                // gl.bindBuffer(gl.ARRAY_BUFFER, particles.buffer)
-	
-	                                                                gl.activeTexture(gl.TEXTURE1);
-	                                                                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
-	                                                                gl.uniform1i(u_particles, 1);
-	
-	                                                                gl.uniform1i(u_particleTexLength, particles.textureLength);
-	
-	                                                                gl.uniform3fv(u_min, grid.min);
-	                                                                gl.uniform3fv(u_max, grid.max);
-	                                                                gl.uniform1f(u_cellSize, grid.cellSize);
-	                                                                gl.uniform1i(u_texLength, grid.textureLength);
-	                                                                // gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
-	
-	                                                                // if (v_pos >= 0) gl.enableVertexAttribArray(v_pos)
-	                                                                // if (v_vel >= 0) gl.enableVertexAttribArray(v_vel)
-	
-	                                                                // if (v_pos >= 0) gl.vertexAttribPointer(v_pos, 3, gl.FLOAT, false, 4 * 3 * 2, 0)
-	                                                                // if (v_vel >= 0) gl.vertexAttribPointer(v_vel, 3, gl.FLOAT, false, 4 * 3 * 2, 4 * 3)
-	
-	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
-	                                                                gl.enableVertexAttribArray(v_id);
-	                                                                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
-	
-	                                                                // for (let g of [grid.gU, grid.gV, grid.gW]) {
-	                                                                // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo)
-	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
-	                                                                gl.clear(gl.COLOR_BUFFER_BIT);
-	
-	                                                                // for (let i = 0; i < 8; ++i) {
-	                                                                // gl.uniform3i(u_iter, i & 0x100, 0x110, 0x001)
-	
-	                                                                // gl.uniform3fv(u_offset, g.offset)
-	                                                                // gl.uniform3i(u_count, g.count[0], g.count[1], g.count[2])
-	
-	                                                                // gl.viewport(0, 0, g.buffer.textureLength, g.buffer.textureLength)
-	                                                                // gl.drawArrays(gl.POINTS, 0, particles.length)
-	                                                                // gl.drawArrays(gl.POINTS, 0, particles.length / 6)
-	                                                                // }
-	                                                                for (var g = 0; g < 3; ++g) {
-	                                                                                // let offset = vec3.fromValues(0.5, 0.5, 0.5)
-	                                                                                // offset[g] = 0
-	                                                                                // let count = vec3.create()
-	                                                                                // vec3.sub(count, grid.max, offset)
-	                                                                                // vec3.sub(count, count, grid.min)
-	                                                                                // vec3.scale(count, count, 1 / grid.cellSize)
-	                                                                                // vec3.add(count, count, vec3.fromValues(1,1,1))
-	                                                                                // vec3.floor(count, count)
-	                                                                                // gl.uniform3fv(u_offset, offset)
-	                                                                                // gl.uniform3i(u_count, count[0], count[1], count[2])
-	                                                                                gl.uniform1i(u_g, g);
-	                                                                                for (var i = 0; i < 3; ++i) {
-	                                                                                                for (var j = 0; j < 3; ++j) {
-	                                                                                                                for (var k = 0; k < 3; ++k) {
-	                                                                                                                                gl.uniform3i(u_goffset, i - 1, j - 1, k - 1);
-	                                                                                                                                gl.drawArrays(gl.POINTS, 0, particles.length);
-	                                                                                                                }
-	                                                                                                }
-	                                                                                }
-	                                                                }
-	                                                                // }
-	
-	                                                                gl.disableVertexAttribArray(v_id);
-	
-	                                                                // if (v_pos >= 0) gl.disableVertexAttribArray(v_pos)
-	                                                                // if (v_vel >= 0) gl.disableVertexAttribArray(v_vel)
-	                                                };
-	                                }();
-	
-	                                var gravityUpdate = function () {
-	                                                var prog = gl.createProgram();
-	
-	                                                var vs = getShader(__webpack_require__(29), gl.VERTEX_SHADER);
-	                                                var fs = getShader(__webpack_require__(30), gl.FRAGMENT_SHADER);
-	                                                addShaders(prog, [vs, fs]);
-	
-	                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
-	                                                var gU_old = gl.getUniformLocation(prog, "gU_old");
-	                                                var u_t = gl.getUniformLocation(prog, "u_t");
-	
-	                                                if (v_pos >= 0) gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
-	
-	                                                return function (t) {
-	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
-	                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
-	
-	                                                                gl.useProgram(prog);
-	
-	                                                                gl.activeTexture(gl.TEXTURE0);
-	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
-	                                                                gl.uniform1i(gU_old, 0);
-	                                                                gl.uniform1f(u_t, t);
-	
-	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
-	
-	                                                                gl.enableVertexAttribArray(v_pos);
-	                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
-	
-	                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	
-	                                                                gl.disableVertexAttribArray(v_pos);
-	
-	                                                                grid.swap();
-	                                                };
-	                                }();
-	
-	                                var updateVelocities = function () {
-	                                                var prog = gl.createProgram();
-	
-	                                                var vs = getShader(__webpack_require__(31), gl.VERTEX_SHADER);
-	                                                var fs = getShader(__webpack_require__(32), gl.FRAGMENT_SHADER);
-	                                                addShaders(prog, [vs, fs]);
-	
-	                                                var u_gA = gl.getUniformLocation(prog, "u_gA");
-	                                                var u_gB = gl.getUniformLocation(prog, "u_gB");
-	                                                var u_particles = gl.getUniformLocation(prog, "u_particles");
-	                                                var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
-	                                                var u_gridTexLength = gl.getUniformLocation(prog, "u_gridTexLength");
-	                                                var u_copy = gl.getUniformLocation(prog, "u_copy");
-	
-	                                                var u_min = gl.getUniformLocation(prog, "u_min");
-	                                                var u_max = gl.getUniformLocation(prog, "u_max");
-	                                                var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
-	                                                var u_count = gl.getUniformLocation(prog, "u_count");
-	
-	                                                var v_id = gl.getAttribLocation(prog, "v_id");
-	
-	                                                return function () {
-	                                                                gl.useProgram(prog);
-	
-	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, particles.B.fbo);
-	                                                                gl.viewport(0, 0, particles.textureLength, particles.textureLength);
-	
-	                                                                gl.activeTexture(gl.TEXTURE0);
-	                                                                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
-	                                                                gl.uniform1i(u_particles, 0);
-	
-	                                                                gl.activeTexture(gl.TEXTURE1);
-	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
-	                                                                gl.uniform1i(u_gA, 1);
-	
-	                                                                gl.activeTexture(gl.TEXTURE2);
-	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.B.tex);
-	                                                                gl.uniform1i(u_gB, 2);
-	
-	                                                                gl.uniform1i(u_particleTexLength, particles.textureLength);
-	                                                                gl.uniform1i(u_gridTexLength, grid.textureLength);
-	                                                                gl.uniform3fv(u_min, grid.min);
-	                                                                gl.uniform3fv(u_max, grid.max);
-	                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
-	                                                                gl.uniform1f(u_cellSize, grid.cellSize);
-	
-	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
-	                                                                gl.enableVertexAttribArray(v_id);
-	                                                                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
-	
-	                                                                gl.uniform1i(u_copy, 0);
-	                                                                gl.drawArrays(gl.POINTS, 0, particles.length);
-	                                                                gl.uniform1i(u_copy, 1);
-	                                                                gl.drawArrays(gl.POINTS, 0, particles.length);
-	
-	                                                                gl.disableVertexAttribArray(v_id);
-	
-	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
-	                                                                gl.bindTexture(gl.TEXTURE_2D, null);
-	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	                                                                particles.swap();
-	                                                };
-	                                }();
-	
-	                                var updatePositions = function () {
-	                                                var prog = gl.createProgram();
-	
-	                                                var vs = getShader(__webpack_require__(33), gl.VERTEX_SHADER);
-	                                                var fs = getShader(__webpack_require__(34), gl.FRAGMENT_SHADER);
-	                                                addShaders(prog, [vs, fs]);
-	
-	                                                var v_id = gl.getAttribLocation(prog, "v_id");
-	                                                var u_particles = gl.getUniformLocation(prog, "u_particles");
-	                                                var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
-	                                                var u_t = gl.getUniformLocation(prog, "u_t");
-	                                                var u_copy = gl.getUniformLocation(prog, "u_copy");
-	
-	                                                return function (t) {
-	                                                                gl.useProgram(prog);
-	
-	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, particles.B.fbo);
-	                                                                gl.viewport(0, 0, particles.textureLength, particles.textureLength);
-	
-	                                                                gl.activeTexture(gl.TEXTURE0);
-	                                                                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
-	                                                                gl.uniform1i(u_particles, 0);
-	
-	                                                                gl.uniform1f(u_t, t);
-	                                                                gl.uniform1i(u_particleTexLength, particles.textureLength);
-	
-	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
-	                                                                gl.enableVertexAttribArray(v_id);
-	                                                                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
-	
-	                                                                gl.uniform1i(u_copy, 0);
-	                                                                gl.drawArrays(gl.POINTS, 0, particles.length);
-	                                                                gl.uniform1i(u_copy, 1);
-	                                                                gl.drawArrays(gl.POINTS, 0, particles.length);
-	
-	                                                                gl.disableVertexAttribArray(v_id);
-	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
-	                                                                gl.bindTexture(gl.TEXTURE_2D, null);
-	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	                                                                // var data = new Float32Array(6*4)
-	                                                                // gl.readPixels(0, 0, 6, 1, gl.RGBA, gl.FLOAT, data)
-	                                                                // console.log(data)
-	                                                                // gl.bindTexture(gl.TEXTURE_2D, particles.B.tex)
-	                                                                // var data = new Float32Array(2*4);
-	                                                                // gl.readPixels(0, 0, 2, 1, gl.RGBA, gl.FLOAT, data)
-	                                                                // console.log("A pos", data)
-	
-	                                                                // gl.bindTexture(gl.TEXTURE_2D, particles.B.tex)
-	                                                                // data = new Float32Array(2*4);
-	                                                                // gl.readPixels(0, 0, 2, 1, gl.RGBA, gl.FLOAT, data)
-	                                                                // console.log("B pos", data)
-	
-	                                                                var data = new Float32Array(2 * 4);
-	
-	                                                                // gl.bindFramebuffer(gl.FRAMEBUFFER, particles.A.fbo)
-	                                                                // gl.readPixels(0, 0, 2, 1, gl.RGBA, gl.FLOAT, data)
-	                                                                // console.log("pre pos", data)
-	
-	                                                                particles.swap();
-	
-	                                                                // gl.bindFramebuffer(gl.FRAMEBUFFER, particles.A.fbo)
-	                                                                // gl.readPixels(0, 0, 2, 1, gl.RGBA, gl.FLOAT, data)
-	                                                                // console.log("post pos", data)
-	
-	
-	                                                                // gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo)
-	
-	                                                                // gl.enableVertexAttribArray(v_pos)
-	                                                };
-	                                }();
-	
-	                                return {
-	                                                step: function step(t) {
-	                                                                gl.clearColor(0, 0, 0, 0.0);
-	                                                                gl.disable(gl.DEPTH_TEST);
-	
-	                                                                gl.enable(gl.BLEND);
-	                                                                gl.blendFunc(gl.ONE, gl.ONE);
-	                                                                // projectToGrid();
-	                                                                gl.disable(gl.BLEND);
-	
-	                                                                gravityUpdate(t);
-	
-	                                                                // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-	
-	                                                                updateVelocities();
-	
-	                                                                updatePositions(t);
-	
-	                                                                // gl.disable(gl.BLEND)
-	                                                }
-	                                };
-	                }
-	
-	                return {
-	                                Sim: Sim
-	                };
-	};
-	
-	var _glMatrix = __webpack_require__(6);
+	module.exports = "\nuniform sampler2D u_grid;\nuniform vec3 u_direction;\nuniform ivec3 u_count;\nuniform vec3 u_offset;\n\nattribute float id;\n\nvoid main() {\n  gl_PointSize = 3.0;\n}"
 
 /***/ },
 /* 27 */
 /***/ function(module, exports) {
 
-	module.exports = "\r\n// uniform bvec3 u_iter;\r\nuniform vec3 u_min;\r\nuniform vec3 u_max;\r\n// uniform vec3 u_offset;\r\n// uniform ivec3 u_count;\r\nuniform ivec3 u_goffset;\r\nuniform float u_cellSize;\r\nuniform int u_texLength;\r\nuniform int u_g;\r\n\r\n// attribute vec3 v_pos;\r\n// attribute vec3 v_vel;\r\n\r\nattribute float v_id;\r\nuniform sampler2D u_particles;\r\nuniform int u_particleTexLength;\r\n\r\nvarying vec3 vel;\r\n\r\nvoid main() {\r\n\r\n    int pIdx = int(v_id) * 2;\r\n    int vIdx = int(v_id) * 2 + 1;\r\n\r\n    int pV = pIdx / u_particleTexLength;\r\n    int pU = pIdx - pV * u_particleTexLength;\r\n\r\n    int vV = vIdx / u_particleTexLength;\r\n    int vU = vIdx - vV * u_particleTexLength;\r\n\r\n    vec2 pUV = vec2(pU, pV) / float(u_particleTexLength);\r\n    vec2 vUV = vec2(vU, vV) / float(u_particleTexLength);\r\n\r\n    vec3 v_pos = texture2D(u_particles, pUV).rgb;\r\n    vec3 v_vel = texture2D(u_particles, vUV).rgb;\r\n\r\n    vec3 offset = vec3(0.5, 0.5, 0.5);\r\n    if (u_g == 0) {\r\n        offset = vec3(0.0, 0.5, 0.5);\r\n    } else if (u_g == 1) {\r\n        offset = vec3(0.5, 0.0, 0.5);\r\n    } else if (u_g == 2) {\r\n        offset = vec3(0.5, 0.0, 0.0);\r\n    }\r\n\r\n    gl_Position = vec4(pUV * 2.0 - 1.0, 0.0, 1.0);\r\n\r\n    /*ivec3 count = ivec3(ceil(((u_max - u_min) - offset) / u_cellSize));\r\n\r\n    vec3 fIdx = clamp((v_pos - offset - u_min) / u_cellSize, vec3(0.0,0.0,0.0), vec3(count));\r\n\r\n    // ivec3 lowerIdx = ivec3(floor(fIdx));\r\n    // ivec3 upperIdx = ivec3(ceil(fIdx));\r\n    ivec3 iIdx = ivec3(floor(fIdx)) + u_goffset;\r\n    // ivec3 iIdx = int(u_iter) * lowerIdx + int(not(u_iter)) * upperIdx;\r\n\r\n    int flatIdx = iIdx.x + iIdx.y * count.x + iIdx.z * count.x * count.z;\r\n\r\n    int t = flatIdx / u_texLength;\r\n    int s = flatIdx - t * u_texLength;\r\n\r\n    vec2 clip = vec2(s, t) / float(u_texLength) * 2.0 - 1.0;\r\n\r\n    float d = distance(fIdx, vec3(iIdx));\r\n    float weight = max(1.0 - d*d / 2.0, 0.0);\r\n\r\n    vel = vec3(0.0, 0.0, 0.0);\r\n    if (u_g == 0) {\r\n        vel[0] = weight * v_vel.x;\r\n    } else if (u_g == 1) {\r\n        vel[1] = weight * v_vel.y;\r\n    } else if (u_g == 2) {\r\n        vel[2] = weight * v_vel.z;\r\n    }\r\n\r\n    gl_Position = vec4(pUV * 2.0 - 1.0, -1.0, 1.0);*/\r\n}"
+	module.exports = "\nprecision mediump float;\n\nuniform vec3 u_color;\n\nvoid main() {\n  gl_FragColor = vec4(u_color, 1.0);\n}"
 
 /***/ },
 /* 28 */
-/***/ function(module, exports) {
+/***/ function(module, exports, __webpack_require__) {
 
-	module.exports = "\r\nprecision mediump float;\r\n\r\nvarying vec3 vel;\r\n\r\nvoid main() {\r\n    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);\r\n}"
+	'use strict';
+	
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+	
+	exports.default = function (gl) {
+	    var _require = __webpack_require__(23)(gl),
+	        getShader = _require.getShader,
+	        addShaders = _require.addShaders;
+	
+	    var quad_vbo = function () {
+	        var buffer = gl.createBuffer();
+	        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+	        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0]), gl.STATIC_DRAW);
+	        return buffer;
+	    }();
+	
+	    function Sim(grid, particles) {
+	
+	        // var fbos = {
+	        //     gU: gl.createFramebuffer(),
+	        //     gV: gl.createFramebuffer(),
+	        //     gW: gl.createFramebuffer(),
+	        //     gU_old: gl.createFramebuffer(),
+	        //     gV_old: gl.createFramebuffer(),
+	        //     gW_old: gl.createFramebuffer(),
+	        //     gP: gl.createFramebuffer(),
+	        //     gType: gl.createFramebuffer()
+	        // }
+	
+	        // for (let fbo in fbos) {
+	        //     gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[fbo])
+	        //     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, grid[fbo].buffer.texture, 0)
+	        // }
+	
+	        // gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+	
+	        var projectToGrid = function () {
+	            var prog = gl.createProgram();
+	
+	            var vs = getShader(__webpack_require__(29), gl.VERTEX_SHADER);
+	            var fs = getShader(__webpack_require__(30), gl.FRAGMENT_SHADER);
+	            addShaders(prog, [vs, fs]);
+	
+	            // var u_iter = gl.getUniformLocation(prog, "u_iter")
+	            var u_min = gl.getUniformLocation(prog, "u_min");
+	            var u_max = gl.getUniformLocation(prog, "u_max");
+	            var u_offset = gl.getUniformLocation(prog, "u_offset");
+	            var u_count = gl.getUniformLocation(prog, "u_count");
+	            var u_goffset = gl.getUniformLocation(prog, "u_goffset");
+	            var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
+	            var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	            var u_g = gl.getUniformLocation(prog, "u_g");
+	
+	            var v_id = gl.getAttribLocation(prog, "v_id");
+	            var u_particles = gl.getUniformLocation(prog, "u_particles");
+	            var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
+	            // var v_pos = gl.getAttribLocation(prog, "v_pos")
+	            // var v_vel = gl.getAttribLocation(prog, "v_vel")
+	
+	            return function () {
+	                gl.useProgram(prog);
+	                // gl.bindBuffer(gl.ARRAY_BUFFER, particles.buffer)
+	
+	                gl.activeTexture(gl.TEXTURE1);
+	                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
+	                gl.uniform1i(u_particles, 1);
+	
+	                gl.uniform1i(u_particleTexLength, particles.textureLength);
+	
+	                gl.uniform3fv(u_min, grid.min);
+	                gl.uniform3fv(u_max, grid.max);
+	                gl.uniform1f(u_cellSize, grid.cellSize);
+	                gl.uniform1i(u_texLength, grid.textureLength);
+	                // gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
+	
+	                // if (v_pos >= 0) gl.enableVertexAttribArray(v_pos)
+	                // if (v_vel >= 0) gl.enableVertexAttribArray(v_vel)
+	
+	                // if (v_pos >= 0) gl.vertexAttribPointer(v_pos, 3, gl.FLOAT, false, 4 * 3 * 2, 0)
+	                // if (v_vel >= 0) gl.vertexAttribPointer(v_vel, 3, gl.FLOAT, false, 4 * 3 * 2, 4 * 3)
+	
+	                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
+	                gl.enableVertexAttribArray(v_id);
+	                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	
+	                // for (let g of [grid.gU, grid.gV, grid.gW]) {
+	                // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo)
+	                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	                gl.clear(gl.COLOR_BUFFER_BIT);
+	
+	                // for (let i = 0; i < 8; ++i) {
+	                // gl.uniform3i(u_iter, i & 0x100, 0x110, 0x001)
+	
+	                // gl.uniform3fv(u_offset, g.offset)
+	                // gl.uniform3i(u_count, g.count[0], g.count[1], g.count[2])
+	
+	                // gl.viewport(0, 0, g.buffer.textureLength, g.buffer.textureLength)
+	                // gl.drawArrays(gl.POINTS, 0, particles.length)
+	                // gl.drawArrays(gl.POINTS, 0, particles.length / 6)
+	                // }
+	                for (var g = 0; g < 3; ++g) {
+	                    // let offset = vec3.fromValues(0.5, 0.5, 0.5)
+	                    // offset[g] = 0
+	                    // let count = vec3.create()
+	                    // vec3.sub(count, grid.max, offset)
+	                    // vec3.sub(count, count, grid.min)
+	                    // vec3.scale(count, count, 1 / grid.cellSize)
+	                    // vec3.add(count, count, vec3.fromValues(1,1,1))
+	                    // vec3.floor(count, count)
+	                    // gl.uniform3fv(u_offset, offset)
+	                    // gl.uniform3i(u_count, count[0], count[1], count[2])
+	                    gl.uniform1i(u_g, g);
+	                    for (var i = 0; i < 3; ++i) {
+	                        for (var j = 0; j < 3; ++j) {
+	                            for (var k = 0; k < 3; ++k) {
+	                                gl.uniform3i(u_goffset, i - 1, j - 1, k - 1);
+	                                gl.drawArrays(gl.POINTS, 0, particles.length);
+	                            }
+	                        }
+	                    }
+	                }
+	                // }
+	
+	                gl.disableVertexAttribArray(v_id);
+	
+	                // if (v_pos >= 0) gl.disableVertexAttribArray(v_pos)
+	                // if (v_vel >= 0) gl.disableVertexAttribArray(v_vel)
+	            };
+	        }();
+	
+	        var gravityUpdate = function () {
+	            var prog = gl.createProgram();
+	
+	            var vs = getShader(__webpack_require__(31), gl.VERTEX_SHADER);
+	            var fs = getShader(__webpack_require__(32), gl.FRAGMENT_SHADER);
+	            addShaders(prog, [vs, fs]);
+	
+	            var v_pos = gl.getAttribLocation(prog, "v_pos");
+	            var gU_old = gl.getUniformLocation(prog, "gU_old");
+	            var u_t = gl.getUniformLocation(prog, "u_t");
+	
+	            if (v_pos >= 0) gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	            return function (t) {
+	                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
+	                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	
+	                gl.useProgram(prog);
+	
+	                gl.activeTexture(gl.TEXTURE0);
+	                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
+	                gl.uniform1i(gU_old, 0);
+	                gl.uniform1f(u_t, t);
+	
+	                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	
+	                gl.enableVertexAttribArray(v_pos);
+	                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	
+	                gl.disableVertexAttribArray(v_pos);
+	
+	                grid.swap();
+	            };
+	        }();
+	
+	        var updateVelocities = function () {
+	            var prog = gl.createProgram();
+	
+	            var vs = getShader(__webpack_require__(33), gl.VERTEX_SHADER);
+	            var fs = getShader(__webpack_require__(34), gl.FRAGMENT_SHADER);
+	            addShaders(prog, [vs, fs]);
+	
+	            var u_gA = gl.getUniformLocation(prog, "u_gA");
+	            var u_gB = gl.getUniformLocation(prog, "u_gB");
+	            var u_particles = gl.getUniformLocation(prog, "u_particles");
+	            var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
+	            var u_gridTexLength = gl.getUniformLocation(prog, "u_gridTexLength");
+	            var u_copy = gl.getUniformLocation(prog, "u_copy");
+	
+	            var u_min = gl.getUniformLocation(prog, "u_min");
+	            var u_max = gl.getUniformLocation(prog, "u_max");
+	            var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
+	            var u_count = gl.getUniformLocation(prog, "u_count");
+	
+	            var v_id = gl.getAttribLocation(prog, "v_id");
+	
+	            return function () {
+	                gl.useProgram(prog);
+	
+	                gl.bindFramebuffer(gl.FRAMEBUFFER, particles.B.fbo);
+	                gl.viewport(0, 0, particles.textureLength, particles.textureLength);
+	
+	                gl.activeTexture(gl.TEXTURE0);
+	                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
+	                gl.uniform1i(u_particles, 0);
+	
+	                gl.activeTexture(gl.TEXTURE1);
+	                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
+	                gl.uniform1i(u_gA, 1);
+	
+	                gl.activeTexture(gl.TEXTURE2);
+	                gl.bindTexture(gl.TEXTURE_2D, grid.B.tex);
+	                gl.uniform1i(u_gB, 2);
+	
+	                gl.uniform1i(u_particleTexLength, particles.textureLength);
+	                gl.uniform1i(u_gridTexLength, grid.textureLength);
+	                gl.uniform3fv(u_min, grid.min);
+	                gl.uniform3fv(u_max, grid.max);
+	                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	                gl.uniform1f(u_cellSize, grid.cellSize);
+	
+	                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
+	                gl.enableVertexAttribArray(v_id);
+	                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	
+	                gl.uniform1i(u_copy, 0);
+	                gl.drawArrays(gl.POINTS, 0, particles.length);
+	                gl.uniform1i(u_copy, 1);
+	                gl.drawArrays(gl.POINTS, 0, particles.length);
+	
+	                gl.disableVertexAttribArray(v_id);
+	
+	                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	                gl.bindTexture(gl.TEXTURE_2D, null);
+	                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                particles.swap();
+	            };
+	        }();
+	
+	        var updatePositions = function () {
+	            var prog = gl.createProgram();
+	
+	            var vs = getShader(__webpack_require__(35), gl.VERTEX_SHADER);
+	            var fs = getShader(__webpack_require__(36), gl.FRAGMENT_SHADER);
+	            addShaders(prog, [vs, fs]);
+	
+	            var v_id = gl.getAttribLocation(prog, "v_id");
+	            var u_particles = gl.getUniformLocation(prog, "u_particles");
+	            var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
+	            var u_t = gl.getUniformLocation(prog, "u_t");
+	            var u_copy = gl.getUniformLocation(prog, "u_copy");
+	            var u_min = gl.getUniformLocation(prog, "u_min");
+	            var u_max = gl.getUniformLocation(prog, "u_max");
+	
+	            return function (t) {
+	                gl.useProgram(prog);
+	
+	                gl.bindFramebuffer(gl.FRAMEBUFFER, particles.B.fbo);
+	                gl.viewport(0, 0, particles.textureLength, particles.textureLength);
+	
+	                gl.activeTexture(gl.TEXTURE0);
+	                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
+	                gl.uniform1i(u_particles, 0);
+	
+	                gl.uniform1f(u_t, t);
+	                gl.uniform1i(u_particleTexLength, particles.textureLength);
+	
+	                gl.uniform3fv(u_min, grid.min);
+	                gl.uniform3fv(u_max, grid.max);
+	
+	                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
+	                gl.enableVertexAttribArray(v_id);
+	                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	
+	                gl.uniform1i(u_copy, 0);
+	                gl.drawArrays(gl.POINTS, 0, particles.length);
+	                gl.uniform1i(u_copy, 1);
+	                gl.drawArrays(gl.POINTS, 0, particles.length);
+	
+	                gl.disableVertexAttribArray(v_id);
+	                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	                gl.bindTexture(gl.TEXTURE_2D, null);
+	                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                // var data = new Float32Array(6*4)
+	                // gl.readPixels(0, 0, 6, 1, gl.RGBA, gl.FLOAT, data)
+	                // console.log(data)
+	                // gl.bindTexture(gl.TEXTURE_2D, particles.B.tex)
+	                // var data = new Float32Array(2*4);
+	                // gl.readPixels(0, 0, 2, 1, gl.RGBA, gl.FLOAT, data)
+	                // console.log("A pos", data)
+	
+	                // gl.bindTexture(gl.TEXTURE_2D, particles.B.tex)
+	                // data = new Float32Array(2*4);
+	                // gl.readPixels(0, 0, 2, 1, gl.RGBA, gl.FLOAT, data)
+	                // console.log("B pos", data)
+	
+	                var data = new Float32Array(2 * 4);
+	
+	                // gl.bindFramebuffer(gl.FRAMEBUFFER, particles.A.fbo)
+	                // gl.readPixels(0, 0, 2, 1, gl.RGBA, gl.FLOAT, data)
+	                // console.log("pre pos", data)
+	
+	                particles.swap();
+	
+	                // gl.bindFramebuffer(gl.FRAMEBUFFER, particles.A.fbo)
+	                // gl.readPixels(0, 0, 2, 1, gl.RGBA, gl.FLOAT, data)
+	                // console.log("post pos", data)
+	
+	
+	                // gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo)
+	
+	                // gl.enableVertexAttribArray(v_pos)
+	            };
+	        }();
+	
+	        return {
+	            step: function step(t) {
+	                gl.clearColor(0, 0, 0, 0.0);
+	                gl.disable(gl.DEPTH_TEST);
+	
+	                gl.enable(gl.BLEND);
+	                gl.blendFunc(gl.ONE, gl.ONE);
+	                // projectToGrid();
+	                gl.disable(gl.BLEND);
+	
+	                gravityUpdate(t);
+	
+	                // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	
+	                updateVelocities();
+	
+	                updatePositions(t);
+	
+	                // gl.disable(gl.BLEND)
+	            }
+	        };
+	    }
+	
+	    return {
+	        Sim: Sim
+	    };
+	};
+	
+	var _glMatrix = __webpack_require__(6);
 
 /***/ },
 /* 29 */
 /***/ function(module, exports) {
 
-	module.exports = "\r\nattribute vec2 v_pos;\r\n\r\nvarying vec2 f_uv;\r\n\r\n void main() {\r\n     f_uv = v_pos * 0.5 + 0.5;\r\n     gl_Position = vec4(v_pos, 0.0, 1.0);\r\n }"
+	module.exports = "\n// uniform bvec3 u_iter;\nuniform vec3 u_min;\nuniform vec3 u_max;\n// uniform vec3 u_offset;\n// uniform ivec3 u_count;\nuniform ivec3 u_goffset;\nuniform float u_cellSize;\nuniform int u_texLength;\nuniform int u_g;\n\n// attribute vec3 v_pos;\n// attribute vec3 v_vel;\n\nattribute float v_id;\nuniform sampler2D u_particles;\nuniform int u_particleTexLength;\n\nvarying vec3 vel;\n\nvoid main() {\n\n    int pIdx = int(v_id) * 2;\n    int vIdx = int(v_id) * 2 + 1;\n\n    int pV = pIdx / u_particleTexLength;\n    int pU = pIdx - pV * u_particleTexLength;\n\n    int vV = vIdx / u_particleTexLength;\n    int vU = vIdx - vV * u_particleTexLength;\n\n    vec2 pUV = vec2(pU, pV) / float(u_particleTexLength);\n    vec2 vUV = vec2(vU, vV) / float(u_particleTexLength);\n\n    vec3 v_pos = texture2D(u_particles, pUV).rgb;\n    vec3 v_vel = texture2D(u_particles, vUV).rgb;\n\n    vec3 offset = vec3(0.5, 0.5, 0.5);\n    if (u_g == 0) {\n        offset = vec3(0.0, 0.5, 0.5);\n    } else if (u_g == 1) {\n        offset = vec3(0.5, 0.0, 0.5);\n    } else if (u_g == 2) {\n        offset = vec3(0.5, 0.0, 0.0);\n    }\n\n    gl_Position = vec4(pUV * 2.0 - 1.0, 0.0, 1.0);\n\n    /*ivec3 count = ivec3(ceil(((u_max - u_min) - offset) / u_cellSize));\n\n    vec3 fIdx = clamp((v_pos - offset - u_min) / u_cellSize, vec3(0.0,0.0,0.0), vec3(count));\n\n    // ivec3 lowerIdx = ivec3(floor(fIdx));\n    // ivec3 upperIdx = ivec3(ceil(fIdx));\n    ivec3 iIdx = ivec3(floor(fIdx)) + u_goffset;\n    // ivec3 iIdx = int(u_iter) * lowerIdx + int(not(u_iter)) * upperIdx;\n\n    int flatIdx = iIdx.x + iIdx.y * count.x + iIdx.z * count.x * count.z;\n\n    int t = flatIdx / u_texLength;\n    int s = flatIdx - t * u_texLength;\n\n    vec2 clip = vec2(s, t) / float(u_texLength) * 2.0 - 1.0;\n\n    float d = distance(fIdx, vec3(iIdx));\n    float weight = max(1.0 - d*d / 2.0, 0.0);\n\n    vel = vec3(0.0, 0.0, 0.0);\n    if (u_g == 0) {\n        vel[0] = weight * v_vel.x;\n    } else if (u_g == 1) {\n        vel[1] = weight * v_vel.y;\n    } else if (u_g == 2) {\n        vel[2] = weight * v_vel.z;\n    }\n\n    gl_Position = vec4(pUV * 2.0 - 1.0, -1.0, 1.0);*/\n}"
 
 /***/ },
 /* 30 */
 /***/ function(module, exports) {
 
-	module.exports = "\r\nprecision mediump float;\r\n\r\nuniform sampler2D gU_old;\r\nuniform float u_t;\r\n\r\nvarying vec2 f_uv;\r\n\r\nvoid main() {\r\n    vec4 col = texture2D(gU_old, f_uv);\r\n    col.g -= 9.81 * u_t / 1000.0;\r\n    gl_FragColor = vec4(col.rgb, 1.0);\r\n}"
+	module.exports = "\nprecision mediump float;\n\nvarying vec3 vel;\n\nvoid main() {\n    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);\n}"
 
 /***/ },
 /* 31 */
 /***/ function(module, exports) {
 
-	module.exports = "\r\nattribute float v_id;\r\nuniform sampler2D u_particles;\r\nuniform sampler2D u_gA;\r\nuniform sampler2D u_gB;\r\n\r\nuniform float u_cellSize;\r\nuniform vec3 u_min;\r\nuniform vec3 u_max;\r\nuniform ivec3 u_count;\r\n\r\nuniform int u_particleTexLength;\r\nuniform int u_gridTexLength;\r\n\r\nuniform bool u_copy;\r\n\r\nvarying vec3 val;\r\n\r\nivec3 gridCount(vec3 offset) {\r\n    return ivec3(ceil((u_max - u_min - offset) / u_cellSize));\r\n}\r\n\r\nfloat gridAt(sampler2D grid, const int g, ivec3 idx) {\r\n    int flatIdx = idx.x + idx.y * u_count.x + idx.z * u_count.x * u_count.y;\r\n\r\n    int gV = flatIdx / u_gridTexLength;\r\n    int gU = flatIdx - gV * u_gridTexLength;\r\n\r\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(u_gridTexLength);\r\n    \r\n    vec4 val = texture2D(grid, gUV);\r\n    if (g == 0) return val[0];\r\n    if (g == 1) return val[1];\r\n    if (g == 2) return val[2];\r\n    return 0.0;\r\n}\r\n\r\nvec3 fractionalIndex(sampler2D grid, const int g, vec3 pos, vec3 offset, ivec3 count) {\r\n    return clamp((pos - offset - u_min) / u_cellSize, vec3(0,0,0), vec3(count));\r\n}\r\n\r\nfloat interolateOnGrid(sampler2D grid, const int g, vec3 pos) {\r\n    vec3 offset = vec3(0.5, 0.5, 0.5);\r\n    if (g == 0) offset[0] = 0.0;\r\n    if (g == 1) offset[1] = 0.0;\r\n    if (g == 2) offset[2] = 0.0;\r\n    ivec3 count = gridCount(offset);\r\n    \r\n    vec3 fIdx = fractionalIndex(grid, g, pos, offset, count);\r\n\r\n    vec3 l = floor(fIdx);\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\r\n\r\n    float k1 = l.z == U.z ? gridAt(grid, g, ivec3(l.x, l.y, l.z)) : (U.z - fIdx.z) * gridAt(grid, g, ivec3(l.x, l.y, l.z)) + (fIdx.z - l.z) * gridAt(grid, g, ivec3(l.x, l.y, U.z));\r\n    float k2 = l.z == U.z ? gridAt(grid, g, ivec3(l.x, U.y, l.z)) : (U.z - fIdx.z) * gridAt(grid, g, ivec3(l.x, U.y, l.z)) + (fIdx.z - l.z) * gridAt(grid, g, ivec3(l.x, U.y, U.z));\r\n    float k3 = l.z == U.z ? gridAt(grid, g, ivec3(U.x, l.y, l.z)) : (U.z - fIdx.z) * gridAt(grid, g, ivec3(U.x, l.y, l.z)) + (fIdx.z - l.z) * gridAt(grid, g, ivec3(U.x, l.y, U.z));\r\n    float k4 = l.z == U.z ? gridAt(grid, g, ivec3(U.x, U.y, l.z)) : (U.z - fIdx.z) * gridAt(grid, g, ivec3(U.x, U.y, l.z)) + (fIdx.z - l.z) * gridAt(grid, g, ivec3(U.x, U.y, U.z));\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n    int pIdx = int(v_id) * 2;\r\n    int vIdx = int(v_id) * 2 + 1;\r\n\r\n    int pV = pIdx / u_particleTexLength;\r\n    int pU = pIdx - pV * u_particleTexLength;\r\n\r\n    int vV = vIdx / u_particleTexLength;\r\n    int vU = vIdx - vV * u_particleTexLength;\r\n\r\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\r\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\r\n\r\n    vec3 pos = texture2D(u_particles, pUV).rgb;\r\n    vec3 vel = texture2D(u_particles, vUV).rgb;\r\n\r\n    if (u_copy) {\r\n        val = pos;\r\n        gl_Position = vec4(pUV * 2.0 - 1.0, 0.0, 1.0);\r\n    } else {\r\n\r\n        vec3 velA = vec3(\r\n            interolateOnGrid(u_gA, 0, pos),\r\n            interolateOnGrid(u_gA, 1, pos),\r\n            interolateOnGrid(u_gA, 2, pos)\r\n        );\r\n        vec3 velB = vec3(\r\n            interolateOnGrid(u_gB, 0, pos),\r\n            interolateOnGrid(u_gB, 1, pos),\r\n            interolateOnGrid(u_gB, 2, pos)\r\n        );\r\n\r\n        val = 0.95 * (vel + (velA - velB)) + 0.05 * velA;\r\n\r\n        gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);\r\n    }\r\n    \r\n    gl_PointSize = 1.0;\r\n}"
+	module.exports = "\nattribute vec2 v_pos;\n\nvarying vec2 f_uv;\n\n void main() {\n     f_uv = v_pos * 0.5 + 0.5;\n     gl_Position = vec4(v_pos, 0.0, 1.0);\n }"
 
 /***/ },
 /* 32 */
 /***/ function(module, exports) {
 
-	module.exports = "\r\nprecision mediump float;\r\n\r\nvarying vec3 val;\r\n\r\nvoid main() {\r\n    gl_FragColor = vec4(val, 1.0);\r\n}"
+	module.exports = "\nprecision mediump float;\n\nuniform sampler2D gU_old;\nuniform float u_t;\n\nvarying vec2 f_uv;\n\nvoid main() {\n    vec4 col = texture2D(gU_old, f_uv);\n    col.g -= 9.81 * u_t / 1000.0;\n    gl_FragColor = vec4(col.rgb, 1.0);\n}"
 
 /***/ },
 /* 33 */
 /***/ function(module, exports) {
 
-	module.exports = "\r\nattribute float v_id;\r\nuniform sampler2D u_particles;\r\nuniform int u_particleTexLength;\r\n\r\nuniform bool u_copy;\r\nuniform float u_t;\r\n\r\nvarying vec3 val;\r\n\r\nvoid main() {\r\n    int pIdx = int(v_id) * 2;\r\n    int vIdx = int(v_id) * 2 + 1;\r\n\r\n    int pV = pIdx / u_particleTexLength;\r\n    int pU = pIdx - pV * u_particleTexLength;\r\n\r\n    int vV = vIdx / u_particleTexLength;\r\n    int vU = vIdx - vV * u_particleTexLength;\r\n\r\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\r\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\r\n\r\n    vec3 pos = texture2D(u_particles, pUV).rgb;\r\n    vec3 vel = texture2D(u_particles, vUV).rgb;\r\n\r\n    if (u_copy) {\r\n        val = vel;\r\n        gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);\r\n    } else {\r\n        val = pos + vel * u_t;\r\n        gl_Position = vec4(pUV * 2.0 - 1.0, 0.0, 1.0);\r\n    }\r\n    \r\n    gl_PointSize = 1.0;\r\n}"
+	module.exports = "\nattribute float v_id;\nuniform sampler2D u_particles;\nuniform sampler2D u_gA;\nuniform sampler2D u_gB;\n\nuniform float u_cellSize;\nuniform vec3 u_min;\nuniform vec3 u_max;\nuniform ivec3 u_count;\n\nuniform int u_particleTexLength;\nuniform int u_gridTexLength;\n\nuniform bool u_copy;\n\nvarying vec3 val;\n\nivec3 gridCount(vec3 offset) {\n    return ivec3(ceil((u_max - u_min - offset) / u_cellSize));\n}\n\nfloat gridAt(sampler2D grid, const int g, ivec3 idx) {\n    int flatIdx = idx.x + idx.y * u_count.x + idx.z * u_count.x * u_count.y;\n\n    int gV = flatIdx / u_gridTexLength;\n    int gU = flatIdx - gV * u_gridTexLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(u_gridTexLength);\n    \n    vec4 val = texture2D(grid, gUV);\n    if (g == 0) return val[0];\n    if (g == 1) return val[1];\n    if (g == 2) return val[2];\n    return 0.0;\n}\n\nvec3 fractionalIndex(sampler2D grid, const int g, vec3 pos, vec3 offset, ivec3 count) {\n    return clamp((pos - offset - u_min) / u_cellSize, vec3(0,0,0), vec3(count));\n}\n\nfloat interolateOnGrid(sampler2D grid, const int g, vec3 pos) {\n    vec3 offset = vec3(0.5, 0.5, 0.5);\n    if (g == 0) offset[0] = 0.0;\n    if (g == 1) offset[1] = 0.0;\n    if (g == 2) offset[2] = 0.0;\n    ivec3 count = gridCount(offset);\n    \n    vec3 fIdx = fractionalIndex(grid, g, pos, offset, count);\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    float k1 = l.z == U.z ? gridAt(grid, g, ivec3(l.x, l.y, l.z)) : (U.z - fIdx.z) * gridAt(grid, g, ivec3(l.x, l.y, l.z)) + (fIdx.z - l.z) * gridAt(grid, g, ivec3(l.x, l.y, U.z));\n    float k2 = l.z == U.z ? gridAt(grid, g, ivec3(l.x, U.y, l.z)) : (U.z - fIdx.z) * gridAt(grid, g, ivec3(l.x, U.y, l.z)) + (fIdx.z - l.z) * gridAt(grid, g, ivec3(l.x, U.y, U.z));\n    float k3 = l.z == U.z ? gridAt(grid, g, ivec3(U.x, l.y, l.z)) : (U.z - fIdx.z) * gridAt(grid, g, ivec3(U.x, l.y, l.z)) + (fIdx.z - l.z) * gridAt(grid, g, ivec3(U.x, l.y, U.z));\n    float k4 = l.z == U.z ? gridAt(grid, g, ivec3(U.x, U.y, l.z)) : (U.z - fIdx.z) * gridAt(grid, g, ivec3(U.x, U.y, l.z)) + (fIdx.z - l.z) * gridAt(grid, g, ivec3(U.x, U.y, U.z));\n\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nvoid main() {\n    int pIdx = int(v_id) * 2;\n    int vIdx = int(v_id) * 2 + 1;\n\n    int pV = pIdx / u_particleTexLength;\n    int pU = pIdx - pV * u_particleTexLength;\n\n    int vV = vIdx / u_particleTexLength;\n    int vU = vIdx - vV * u_particleTexLength;\n\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\n\n    vec3 pos = texture2D(u_particles, pUV).rgb;\n    vec3 vel = texture2D(u_particles, vUV).rgb;\n\n    if (u_copy) {\n        val = pos;\n        gl_Position = vec4(pUV * 2.0 - 1.0, 0.0, 1.0);\n    } else {\n\n        vec3 velA = vec3(\n            interolateOnGrid(u_gA, 0, pos),\n            interolateOnGrid(u_gA, 1, pos),\n            interolateOnGrid(u_gA, 2, pos)\n        );\n        vec3 velB = vec3(\n            interolateOnGrid(u_gB, 0, pos),\n            interolateOnGrid(u_gB, 1, pos),\n            interolateOnGrid(u_gB, 2, pos)\n        );\n\n        // val = 0.95 * (vel + (velA - velB)) + 0.05 * velA;\n        val = vel + (velA - velB);\n        gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);\n    }\n    \n    gl_PointSize = 1.0;\n}"
 
 /***/ },
 /* 34 */
 /***/ function(module, exports) {
 
-	module.exports = "\r\nprecision mediump float;\r\n\r\nvarying vec3 val;\r\n\r\nvoid main() {\r\n    gl_FragColor = vec4(val, 1.0);\r\n}"
+	module.exports = "\nprecision mediump float;\n\nvarying vec3 val;\n\nvoid main() {\n    gl_FragColor = vec4(val, 1.0);\n}"
+
+/***/ },
+/* 35 */
+/***/ function(module, exports) {
+
+	module.exports = "\nattribute float v_id;\nuniform sampler2D u_particles;\nuniform int u_particleTexLength;\n\nuniform bool u_copy;\nuniform float u_t;\nuniform vec3 u_min;\nuniform vec3 u_max;\n\nvarying vec3 val;\n\nvoid main() {\n    int pIdx = int(v_id) * 2;\n    int vIdx = int(v_id) * 2 + 1;\n\n    int pV = pIdx / u_particleTexLength;\n    int pU = pIdx - pV * u_particleTexLength;\n\n    int vV = vIdx / u_particleTexLength;\n    int vU = vIdx - vV * u_particleTexLength;\n\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\n\n    vec3 pos = texture2D(u_particles, pUV).rgb;\n    vec3 vel = texture2D(u_particles, vUV).rgb;\n\n    if (u_copy) {\n        vec3 futurePos = pos + vel * u_t;\n        if (futurePos.x < u_min.x || futurePos.x >= u_max.x) {\n            vel.x *= -1.0;\n        }\n        if (futurePos.y < u_min.y || futurePos.y >= u_max.y) {\n            vel.y *= -1.0;\n        }\n        if (futurePos.z < u_min.z || futurePos.z >= u_max.z) {\n            vel.z *= -1.0;\n        }\n\n        val = vel;\n        gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);\n    } else {\n        val = clamp(pos + vel * u_t, u_min, u_max);\n        gl_Position = vec4(pUV * 2.0 - 1.0, 0.0, 1.0);\n    }\n    \n    gl_PointSize = 1.0;\n}"
+
+/***/ },
+/* 36 */
+/***/ function(module, exports) {
+
+	module.exports = "\nprecision mediump float;\n\nvarying vec3 val;\n\nvoid main() {\n    gl_FragColor = vec4(val, 1.0);\n}"
 
 /***/ }
 /******/ ]);
