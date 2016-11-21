@@ -4,25 +4,24 @@ function Painters(gl) {
 
   const {getShader, addShaders} = require('./util')(gl);
 
-  var particleProg = gl.createProgram();
-
-  var ParticlePainter;
-
-  (function() {
-    var particleVS = getShader(require('./shaders/particle-vert.glsl'), gl.VERTEX_SHADER);
-    var particleFS = getShader(require('./shaders/particle-frag.glsl'), gl.FRAGMENT_SHADER);
-    addShaders(particleProg, [particleVS, particleFS]);
+  var ParticlePainter
+  var GridPainter
 
     (function() {
-      // var v_pos = gl.getAttribLocation(particleProg, "v_pos")
-      var v_id = gl.getAttribLocation(particleProg, "v_id")
-      var u_particles = gl.getUniformLocation(particleProg, "u_particles")
-      var u_texLength = gl.getUniformLocation(particleProg, "u_texLength")
-      var u_viewProj = gl.getUniformLocation(particleProg, "u_viewProj")
+      var prog = gl.createProgram()
+
+      var vs = getShader(require('./shaders/particle-vert.glsl'), gl.VERTEX_SHADER);
+      var fs = getShader(require('./shaders/particle-frag.glsl'), gl.FRAGMENT_SHADER);
+      addShaders(prog, [vs, fs]);
+
+      var v_id = gl.getAttribLocation(prog, "v_id")
+      var u_particles = gl.getUniformLocation(prog, "u_particles")
+      var u_texLength = gl.getUniformLocation(prog, "u_texLength")
+      var u_viewProj = gl.getUniformLocation(prog, "u_viewProj")
 
       ParticlePainter = function(particles) {
         function draw(state) {
-          gl.useProgram(particleProg)
+          gl.useProgram(prog)
           
           gl.activeTexture(gl.TEXTURE0)
           gl.bindTexture(gl.TEXTURE_2D, particles.A.tex)
@@ -57,10 +56,52 @@ function Painters(gl) {
         }
       };
     })();
-  })();
+
+    (function() {
+      var prog = gl.createProgram()
+
+      var vs = getShader(require('./shaders/grid-vert.glsl'), gl.VERTEX_SHADER);
+      var fs = getShader(require('./shaders/grid-frag.glsl'), gl.FRAGMENT_SHADER);
+      addShaders(prog, [vs, fs]);
+
+      var u_grid = gl.getUniformLocation(prog, "u_grid")
+      var u_direction = gl.getUniformLocation(prog, "u_direction")
+      var u_count = gl.getUniformLocation(prog, "u_count")
+      var u_offset = gl.getUniformLocation(prog, "u_offset")
+      var u_color = gl.getUniformLocation(prog, "u_color")
+
+      GridPainter = function(grid) {
+        function draw(state) {
+          gl.useProgram(prog)
+        }
+
+        function useX() {
+          gl.useProgram(prog)
+          gl.uniform3f(u_offset, 0, 0.5, 0.5)
+        }
+
+        function useY() {
+          gl.useProgram(prog)
+          gl.uniform3f(u_offset, 0.5, 0, 0.5)
+        }
+
+        function useZ() {
+          gl.useProgram(prog)
+          gl.uniform3f(u_offset, 0.5, 0.5, 0)
+        }
+        
+        return {
+          draw,
+          useX,
+          useY,
+          useZ
+        }
+      }
+    })();
   
   return {
-    ParticlePainter
+    ParticlePainter,
+    GridPainter
   }
 }
 
