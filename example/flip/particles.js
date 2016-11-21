@@ -1,6 +1,6 @@
 'use strict'
 
-const ATTRIB_COUNT = 6
+const ATTRIB_COUNT = 8
 
 function Particle(i, buffer) {
   var particle = {}
@@ -14,13 +14,13 @@ function Particle(i, buffer) {
     get: () => buffer[ATTRIB_COUNT * i + 2]
   })
   Object.defineProperty(particle, 'vx', {
-    get: () => buffer[ATTRIB_COUNT * i + 3]
-  })
-  Object.defineProperty(particle, 'vy', {
     get: () => buffer[ATTRIB_COUNT * i + 4]
   })
-  Object.defineProperty(particle, 'vz', {
+  Object.defineProperty(particle, 'vy', {
     get: () => buffer[ATTRIB_COUNT * i + 5]
+  })
+  Object.defineProperty(particle, 'vz', {
+    get: () => buffer[ATTRIB_COUNT * i + 6]
   })
 
   return particle
@@ -38,9 +38,11 @@ export function _ParticleBuffer(gl) {
           particles.push(x)
           particles.push(y)
           particles.push(z)
+          particles.push(0) // filler
           particles.push(0.0001*(Math.random() - 0.5))
           particles.push(0.0001*(Math.random() - 0.5))
           particles.push(0.0001*(Math.random() - 0.5))
+          particles.push(0) // filler
         })
       },
 
@@ -51,7 +53,7 @@ export function _ParticleBuffer(gl) {
         particleBuffer.textureLength = Math.pow(2, Math.ceil(Math.log2(Math.ceil(Math.sqrt(minPixels)))))
 
         var ids = new Float32Array(particleBuffer.length);
-        particleBuffer.buffer = new Float32Array(3*particleBuffer.textureLength * particleBuffer.textureLength)
+        particleBuffer.buffer = new Float32Array(4*particleBuffer.textureLength * particleBuffer.textureLength)
         for (let i = 0; i < particles.length; ++i) {
           particleBuffer.buffer[i] = particles[i]
           ids[i] = i
@@ -68,7 +70,7 @@ export function _ParticleBuffer(gl) {
         }
 
         gl.bindTexture(gl.TEXTURE_2D, particleBuffer.A.tex)
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, particleBuffer.textureLength, particleBuffer.textureLength, 0, gl.RGB, gl.FLOAT, particleBuffer.buffer)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, particleBuffer.textureLength, particleBuffer.textureLength, 0, gl.RGBA, gl.FLOAT, particleBuffer.buffer)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
@@ -79,7 +81,7 @@ export function _ParticleBuffer(gl) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
         gl.bindTexture(gl.TEXTURE_2D, particleBuffer.B.tex)
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, particleBuffer.textureLength, particleBuffer.textureLength, 0, gl.RGB, gl.FLOAT, particleBuffer.buffer)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, particleBuffer.textureLength, particleBuffer.textureLength, 0, gl.RGBA, gl.FLOAT, particleBuffer.buffer)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
@@ -106,9 +108,10 @@ export function _ParticleBuffer(gl) {
       },
 
       swap() {
-        var temp = particleBuffer.A
-        particleBuffer.A = particleBuffer.B
-        particleBuffer.B = temp
+        particleBuffer.B = [particleBuffer.A, particleBuffer.A = particleBuffer.B][0]
+        // var temp = particleBuffer.A
+        // particleBuffer.A = particleBuffer.B
+        // particleBuffer.B = temp
       },
 
       buffer: null

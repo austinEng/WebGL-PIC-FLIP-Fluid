@@ -12,7 +12,8 @@ import _Sim from './sim'
 const canvas = document.getElementById("canvas");
 
 const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
-gl.getExtension("OES_texture_float")
+const ext_tex_float = gl.getExtension("OES_texture_float")
+if (!ext_tex_float) console.warn("OES_texture_float not supported!")
 
 const {ParticlePainter} = Painters(gl)
 

@@ -27,5 +27,5 @@ void main() {
 
     f_col = v_vel; // v_pos + vec3(0.5, 0.5, 0.5);
     gl_Position = u_viewProj * vec4(v_pos, 1.0);
-    gl_PointSize = 3.0;
+    gl_PointSize = 1.0;
 }
