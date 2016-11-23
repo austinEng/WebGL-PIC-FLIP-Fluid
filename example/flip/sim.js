@@ -37,6 +37,34 @@ export default function (gl) {
 
         // gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
+        var clearGridVelocity = (function() {
+            var prog = gl.createProgram()
+
+            var vs = getShader(require('./shaders/quad-vert.glsl'), gl.VERTEX_SHADER);
+            var fs = getShader(require('./shaders/clearVel-frag.glsl'), gl.FRAGMENT_SHADER);
+            addShaders(prog, [vs, fs]);
+
+            var v_pos = gl.getAttribLocation(prog, "v_pos")
+
+            return function() {
+                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo)
+                gl.viewport(0, 0, grid.textureLength, grid.textureLength)
+
+                gl.useProgram(prog)
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo)
+                
+                gl.enableVertexAttribArray(v_pos)
+                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0)
+                
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+                gl.disableVertexAttribArray(v_pos)
+
+                grid.swap()
+            }
+        })()
+
         var projectToGrid = (function() {
             var prog = gl.createProgram()
 
@@ -118,7 +146,7 @@ export default function (gl) {
                             for (let j = 0; j < 3; ++j) {
                                 for (let k = 0; k < 3; ++k) {
                                     gl.uniform3i(u_goffset, i - 1, j - 1, k - 1);
-                                    gl.drawArrays(gl.POINTS, 0, particles.length)
+                                    // gl.drawArrays(gl.POINTS, 0, particles.length)
                                 }
                             }   
                         }
@@ -142,8 +170,6 @@ export default function (gl) {
             var v_pos = gl.getAttribLocation(prog, "v_pos")
             var gU_old = gl.getUniformLocation(prog, "gU_old")
             var u_t = gl.getUniformLocation(prog, "u_t")
-
-            if (v_pos >= 0) gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0)
 
             return function(t) {
                 gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo)
@@ -317,10 +343,12 @@ export default function (gl) {
                 gl.clearColor(0, 0, 0, 0.0);
                 gl.disable(gl.DEPTH_TEST)
 
-                gl.enable(gl.BLEND)
-                gl.blendFunc(gl.ONE, gl.ONE)
-                // projectToGrid();
-                gl.disable(gl.BLEND)
+                clearGridVelocity()
+
+                // gl.enable(gl.BLEND)
+                // gl.blendFunc(gl.ONE, gl.ONE)
+                projectToGrid();
+                // gl.disable(gl.BLEND)
 
                 gravityUpdate(t);
 

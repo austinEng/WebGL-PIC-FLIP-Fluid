@@ -14,7 +14,7 @@ const canvas = document.getElementById("canvas");
 const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
 const ext_tex_float = gl.getExtension("OES_texture_float")
 
-const {ParticlePainter} = Painters(gl)
+const {ParticlePainter, GridPainter} = Painters(gl)
 
 const ParticleBuffer = _ParticleBuffer(gl)
 const {ComputeBuffer, Computation} = _Compute(gl)
@@ -36,7 +36,7 @@ var c2 = new Computation(incr, ComputeBuffer.TEXTURE, ComputeBuffer.TEXTURE)*/
 // var Grid = new MAC(new Bound(-1, 1, -1, 1, -1, 1), 0.1)
 // console.log(Grid)
 
-var DENSITY = 500000 // particles per cubic meter
+var DENSITY = 100000 // particles per cubic meter
 var CELL_SIZE = 2 / Math.cbrt(DENSITY) // ~8 particles per cell
 
 var box = new BoxRegion(DENSITY, new Bound({
@@ -54,12 +54,11 @@ var grid = new MACGrid(new Bound({
   minZ: -0.5, maxZ: 0.5
 }), CELL_SIZE)
 
-var devParticles = new ComputeBuffer(particles.buffer, ComputeBuffer.ARRAY)
-
 var sim = Sim(grid, particles)
 
 var renderer = Renderer(gl);
 renderer.add(ParticlePainter(particles))
+renderer.add(GridPainter(grid))
 
 var drawloop = Loop(
   () => {
