@@ -1,5 +1,5 @@
 
-precision mediump float;
+precision highp float;
 
 varying vec3 f_col;
 

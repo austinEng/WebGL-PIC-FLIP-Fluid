@@ -20,13 +20,13 @@ void main() {
   int vidx = idx / u_texLength;
   int uidx = idx - vidx * u_texLength;
 
-  vec2 uv = (vec2(uidx, vidx) + 0.1) / float(u_texLength);
+  vec2 uv = (vec2(uidx, vidx) + 0.01) / float(u_texLength);
 
   int z = idx / (u_count.x * u_count.y);
   int y = (idx - z * (u_count.x * u_count.y)) / u_count.x;
   int x = idx - y * u_count.x - z * (u_count.x * u_count.y);
 
-  vec3 pos = u_min + u_offset * 0.5 + vec3(x, y, z) * u_cellSize;
+  vec3 pos = u_min + u_offset + vec3(x, y, z) * u_cellSize;
 
   if (u_g == 0) {
     if (v_id / 2.0 > floor(v_id / 2.0)) {

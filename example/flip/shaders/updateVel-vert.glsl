@@ -40,7 +40,7 @@ vec3 fractionalIndex(sampler2D grid, const int g, vec3 pos, vec3 offset, ivec3 c
 }
 
 float interolateOnGrid(sampler2D grid, const int g, vec3 pos) {
-    vec3 offset = vec3(0.5, 0.5, 0.5);
+    vec3 offset = vec3(0.5, 0.5, 0.5) * u_cellSize;
     if (g == 0) offset[0] = 0.0;
     if (g == 1) offset[1] = 0.0;
     if (g == 2) offset[2] = 0.0;

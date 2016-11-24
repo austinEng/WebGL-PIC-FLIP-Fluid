@@ -19,13 +19,13 @@ void main() {
     int vV = vIdx / u_texLength;
     int vU = vIdx - vV * u_texLength;
 
-    vec2 pUV = (vec2(pU, pV) + 0.1) / float(u_texLength);
-    vec2 vUV = (vec2(vU, vV) + 0.1) / float(u_texLength);
+    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_texLength);
+    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_texLength);
 
     vec3 v_pos = texture2D(u_particles, pUV).rgb;
     vec3 v_vel = 10.0*abs(texture2D(u_particles, vUV).rgb);
 
     f_col = v_vel; // v_pos + vec3(0.5, 0.5, 0.5);
     gl_Position = u_viewProj * vec4(v_pos, 1.0);
-    gl_PointSize = 5.0;
+    gl_PointSize = 3.0;
 }

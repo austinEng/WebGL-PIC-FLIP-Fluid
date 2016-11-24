@@ -27,16 +27,16 @@ void main() {
     vec3 vel = texture2D(u_particles, vUV).rgb;
 
     if (u_copy) {
-        vec3 futurePos = pos + vel * u_t;
-        if (futurePos.x < u_min.x || futurePos.x >= u_max.x) {
-            vel.x *= -1.0;
-        }
-        if (futurePos.y < u_min.y || futurePos.y >= u_max.y) {
-            vel.y *= -1.0;
-        }
-        if (futurePos.z < u_min.z || futurePos.z >= u_max.z) {
-            vel.z *= -1.0;
-        }
+        // vec3 futurePos = pos + vel * u_t;
+        // if (futurePos.x < u_min.x || futurePos.x >= u_max.x) {
+        //     vel.x *= -1.0;
+        // }
+        // if (futurePos.y < u_min.y || futurePos.y >= u_max.y) {
+        //     vel.y *= -1.0;
+        // }
+        // if (futurePos.z < u_min.z || futurePos.z >= u_max.z) {
+        //     vel.z *= -1.0;
+        // }
 
         val = vel;
         gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);
