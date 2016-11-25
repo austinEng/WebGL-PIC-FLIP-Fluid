@@ -42,6 +42,7 @@ void main() {
         gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);
     } else {
         val = clamp(pos + vel * u_t, u_min, u_max);
+        // val = pos + vel * u_t;
         gl_Position = vec4(pUV * 2.0 - 1.0, 0.0, 1.0);
     }
     

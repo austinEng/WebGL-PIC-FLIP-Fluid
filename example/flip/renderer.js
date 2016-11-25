@@ -30,7 +30,7 @@ export default function Renderer(gl) {
     if (!webgl2Enabled) console.warn("WebGL 2 not supported. Falling back to WebGL 1")
     
     camera = Camera(canvas)
-    camera.position.set(0, 0, 1.5);
+    camera.position.set(1,1,1);
   }
   
   var cameraMat = new THREE.Matrix4();

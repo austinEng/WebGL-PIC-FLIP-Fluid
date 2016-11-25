@@ -30,15 +30,15 @@ void main() {
 
   if (u_g == 0) {
     if (v_id / 2.0 > floor(v_id / 2.0)) {
-      pos += vec3(1,0,0) * texture2D(u_grid, uv)[0];
+      pos += 1.0 * vec3(1,0,0) * texture2D(u_grid, uv)[0];
     }
   } else if (u_g == 1) {
     if (v_id / 2.0 > floor(v_id / 2.0)) {
-      pos += vec3(0,1,0) * texture2D(u_grid, uv)[1];
+      pos += 1.0 * vec3(0,1,0) * texture2D(u_grid, uv)[1];
     }
   } else if (u_g == 2) {
     if (v_id / 2.0 > floor(v_id / 2.0)) {
-      pos += vec3(0,0,1) * texture2D(u_grid, uv)[2];
+      pos += 1.0 * vec3(0,0,1) * texture2D(u_grid, uv)[2];
     }
   }
 

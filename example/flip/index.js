@@ -36,13 +36,13 @@ var c2 = new Computation(incr, ComputeBuffer.TEXTURE, ComputeBuffer.TEXTURE)*/
 // var Grid = new MAC(new Bound(-1, 1, -1, 1, -1, 1), 0.1)
 // console.log(Grid)
 
-var DENSITY = 100*100*100 // particles per cubic meter
+var DENSITY = 100000 // particles per cubic meter
 var CELL_SIZE = 2 / Math.cbrt(DENSITY) // ~8 particles per cell
 
 var box = new BoxRegion(DENSITY, new Bound({
-  minX: -0.1, maxX: 0.1,
+  minX: -0.4, maxX: 0.4,
   minY: 0.3, maxY: 0.5,
-  minZ: -0.1, maxZ: 0.1
+  minZ: -0.4, maxZ: 0.4
 }))
 var particles = new ParticleBuffer()
 particles.addRegion(box)
