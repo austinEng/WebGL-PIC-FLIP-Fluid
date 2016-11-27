@@ -40,9 +40,9 @@ var DENSITY = 100000 // particles per cubic meter
 var CELL_SIZE = 2 / Math.cbrt(DENSITY) // ~8 particles per cell
 
 var box = new BoxRegion(DENSITY, new Bound({
-  minX: -0.4, maxX: 0.4,
+  minX: -0.3, maxX: 0.3,
   minY: 0.3, maxY: 0.5,
-  minZ: -0.4, maxZ: 0.4
+  minZ: -0.3, maxZ: 0.3
 }))
 var particles = new ParticleBuffer()
 particles.addRegion(box)

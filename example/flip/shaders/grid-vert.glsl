@@ -1,9 +1,8 @@
 
 uniform sampler2D u_grid;
 uniform vec3 u_direction;
-uniform ivec3 u_count;
-uniform vec3 u_offset;
 uniform vec3 u_min;
+uniform vec3 u_max;
 uniform float u_cellSize;
 uniform mat4 u_viewProj;
 uniform int u_texLength;
@@ -12,6 +11,8 @@ uniform int u_g;
 attribute float v_id;
 
 varying vec3 f_col;
+
+@import ./include/grid;
 
 void main() {
 
@@ -22,21 +23,29 @@ void main() {
 
   vec2 uv = (vec2(uidx, vidx) + 0.01) / float(u_texLength);
 
-  int z = idx / (u_count.x * u_count.y);
-  int y = (idx - z * (u_count.x * u_count.y)) / u_count.x;
-  int x = idx - y * u_count.x - z * (u_count.x * u_count.y);
-
-  vec3 pos = u_min + u_offset + vec3(x, y, z) * u_cellSize;
+  vec3 pos;
 
   if (u_g == 0) {
+    vec3 offset = vec3(0,0.5,0.5) * u_cellSize;
+    ivec3 count = gridCount(offset, u_max, u_min, u_cellSize);
+    pos = positionOf(toXYZ(idx, count), u_min, offset, u_cellSize);
+
     if (v_id / 2.0 > floor(v_id / 2.0)) {
       pos += 1.0 * vec3(1,0,0) * texture2D(u_grid, uv)[0];
     }
   } else if (u_g == 1) {
+    vec3 offset = vec3(0.5,0,0.5) * u_cellSize;
+    ivec3 count = gridCount(offset, u_max, u_min, u_cellSize);
+    pos = positionOf(toXYZ(idx, count), u_min, offset, u_cellSize);
+
     if (v_id / 2.0 > floor(v_id / 2.0)) {
       pos += 1.0 * vec3(0,1,0) * texture2D(u_grid, uv)[1];
     }
   } else if (u_g == 2) {
+    vec3 offset = vec3(0.5,0.5,0) * u_cellSize;
+    ivec3 count = gridCount(offset, u_max, u_min, u_cellSize);
+    pos = positionOf(toXYZ(idx, count), u_min, offset, u_cellSize);
+
     if (v_id / 2.0 > floor(v_id / 2.0)) {
       pos += 1.0 * vec3(0,0,1) * texture2D(u_grid, uv)[2];
     }

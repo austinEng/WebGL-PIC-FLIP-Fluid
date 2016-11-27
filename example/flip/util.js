@@ -23,6 +23,7 @@ module.exports = function(gl) {
 
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
       console.error("Failed to link program");
+      console.error(gl.getProgramInfoLog(program));
     }
   }
 

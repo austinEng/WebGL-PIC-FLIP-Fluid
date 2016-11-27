@@ -18,6 +18,8 @@ uniform int u_particleTexLength;
 
 varying vec4 vel;
 
+@import ./include/grid;
+
 void main() {
 
     int pIdx = int(v_id) * 2;
@@ -44,17 +46,28 @@ void main() {
         offset[2] = 0.0;
     }
 
-    ivec3 count = ivec3(ceil((u_max - u_min - offset) / u_cellSize));
+    // ivec3 count = ivec3(ceil((u_max - u_min - offset) / u_cellSize));
+    ivec3 count = gridCount(offset, u_max, u_min, u_cellSize);
 
-    vec3 fIdx = clamp((v_pos - offset - u_min) / u_cellSize, vec3(0.0,0.0,0.0), vec3(count));
-    ivec3 iIdx = ivec3(clamp(floor(fIdx) + vec3(u_goffset), vec3(0.0,0.0,0.0), vec3(count)));
-    int flatIdx = iIdx.x + iIdx.y * count.x + iIdx.z * count.x * count.y;
+    // vec3 fIdx = clamp((v_pos - offset - u_min) / u_cellSize, vec3(0.0,0.0,0.0), vec3(count));
+    // ivec3 iIdx = ivec3(clamp(floor(fIdx) + vec3(u_goffset), vec3(0.0,0.0,0.0), vec3(count)));
+    // int flatIdx = iIdx.x + iIdx.y * count.x + iIdx.z * count.x * count.y;
+
+    vec3 fIdx = fractionalIndexOf(v_pos, u_min, count, u_cellSize, offset);
+    ivec3 iIdx = indexOf(v_pos, u_min, count, u_cellSize, offset) + u_goffset;
+    if (!checkIdx(iIdx, count)) {
+        gl_Position = vec4(vec3(10000), 1.0);
+        return;
+    }
+
+    int flatIdx = toFlat(iIdx, count);
 
     int t = flatIdx / u_texLength;
     int s = flatIdx - t * u_texLength;
     vec2 st = (vec2(s, t) + 0.1) / float(u_texLength);
 
     float d = distance(fIdx, vec3(iIdx));
+    // float d = distance(v_pos, positionOf(iIdx, u_min, offset, u_cellSize));
     float weight = max(1.0 - d*d / 2.0, 0.0);
 
     vel = vec4(0.0, 0.0, 0.0, weight > 0.0);

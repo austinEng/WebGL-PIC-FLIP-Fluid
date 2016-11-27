@@ -4,7 +4,7 @@ const THREE = require('three')
 const OrbitControls = require('three-orbit-controls')(THREE)
 
 function Camera(canvas) {
-  var camera = new THREE.PerspectiveCamera( 75, canvas.width / canvas.height, 0.1, 1000 );
+  var camera = new THREE.PerspectiveCamera( 10, canvas.width / canvas.height, 0.1, 1000 );
 
   var controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
@@ -30,7 +30,7 @@ export default function Renderer(gl) {
     if (!webgl2Enabled) console.warn("WebGL 2 not supported. Falling back to WebGL 1")
     
     camera = Camera(canvas)
-    camera.position.set(1,1,1);
+    camera.position.set(0,0,10);
   }
   
   var cameraMat = new THREE.Matrix4();

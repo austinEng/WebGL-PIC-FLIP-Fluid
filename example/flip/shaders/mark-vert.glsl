@@ -10,6 +10,9 @@ uniform int u_particleTexLength;
 
 varying float type;
 
+
+@import ./include/grid;
+
 void main() {
     int pIdx = int(v_id) * 2;
     int vIdx = int(v_id) * 2 + 1;
@@ -24,13 +27,19 @@ void main() {
     vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);
 
     vec3 v_pos = texture2D(u_particles, pUV).rgb;
+    vec3 v_vel = texture2D(u_particles, vUV).rgb;
 
     vec3 offset = vec3(0.5, 0.5, 0.5) * u_cellSize;
-    ivec3 count = ivec3(ceil((u_max - u_min - offset) / u_cellSize));
+    ivec3 count = gridCount(offset, u_max, u_min, u_cellSize); 
+    // ivec3 count = ivec3(ceil((u_max - u_min - offset) / u_cellSize));
 
-    vec3 fIdx = clamp((v_pos - offset - u_min) / u_cellSize, vec3(0.0,0.0,0.0), vec3(count));
-    ivec3 iIdx = ivec3(clamp(floor(fIdx), vec3(0.0,0.0,0.0), vec3(count)));
-    int flatIdx = iIdx.x + iIdx.y * count.x + iIdx.z * count.x * count.y;
+    // vec3 fIdx = clamp((v_pos - offset - u_min) / u_cellSize, vec3(0.0,0.0,0.0), vec3(count));
+    // ivec3 iIdx = ivec3(clamp(floor(fIdx), vec3(0.0,0.0,0.0), vec3(count)));
+    // int flatIdx = iIdx.x + iIdx.y * count.x + iIdx.z * count.x * count.y;
+
+    ivec3 idx = indexOf(v_pos, u_min, count, u_cellSize, vec3(0,0,0));
+    idx = ivec3(clamp(vec3(idx), vec3(0,0,0), vec3(count - 1)));
+    int flatIdx = toFlat(idx, count);
 
     int t = flatIdx / u_texLength;
     int s = flatIdx - t * u_texLength;

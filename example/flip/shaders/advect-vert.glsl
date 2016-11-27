@@ -8,7 +8,13 @@ uniform float u_t;
 uniform vec3 u_min;
 uniform vec3 u_max;
 
+uniform sampler2D u_grid;
+uniform int u_texLength;
+uniform float u_cellSize;
+
 varying vec3 val;
+
+@import ./include/grid;
 
 void main() {
     int pIdx = int(v_id) * 2;
@@ -27,22 +33,27 @@ void main() {
     vec3 vel = texture2D(u_particles, vUV).rgb;
 
     if (u_copy) {
-        // vec3 futurePos = pos + vel * u_t;
-        // if (futurePos.x < u_min.x || futurePos.x >= u_max.x) {
-        //     vel.x *= -1.0;
-        // }
-        // if (futurePos.y < u_min.y || futurePos.y >= u_max.y) {
-        //     vel.y *= -1.0;
-        // }
-        // if (futurePos.z < u_min.z || futurePos.z >= u_max.z) {
-        //     vel.z *= -1.0;
-        // }
-
         val = vel;
         gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);
     } else {
-        val = clamp(pos + vel * u_t, u_min, u_max);
+        vec3 offset = vec3(0,0,0);
+        ivec3 count = gridCount(offset, u_max, u_min, u_cellSize);
+
+        vec3 xOffset = vec3(0, u_cellSize*0.5, u_cellSize*0.5);
+        vec3 yOffset = vec3(u_cellSize*0.5, 0, u_cellSize*0.5);
+        vec3 zOffset = vec3(u_cellSize*0.5, u_cellSize*0.5, 0);
+
+        ivec3 xCount = gridCount(xOffset, u_max, u_min, u_cellSize);
+        ivec3 yCount = gridCount(yOffset, u_max, u_min, u_cellSize);
+        ivec3 zCount = gridCount(zOffset, u_max, u_min, u_cellSize);
+
+        // vel = vec3(
+        //     gridComponentInterpolate(u_grid, pos + vel * u_t * 0.5, u_min, xOffset, xCount, u_texLength, u_cellSize, 0),
+        //     gridComponentInterpolate(u_grid, pos + vel * u_t * 0.5, u_min, yOffset, yCount, u_texLength, u_cellSize, 1),
+        //     gridComponentInterpolate(u_grid, pos + vel * u_t * 0.5, u_min, zOffset, zCount, u_texLength, u_cellSize, 2)
+        // );
         // val = pos + vel * u_t;
+        val = clamp(pos + vel * u_t, u_min, u_max);
         gl_Position = vec4(pUV * 2.0 - 1.0, 0.0, 1.0);
     }
     

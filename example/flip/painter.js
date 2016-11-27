@@ -60,95 +60,125 @@ function Painters(gl) {
     })();
 
     (function() {
-      var prog = gl.createProgram()
+      var progcube = gl.createProgram()
+      var vs = getShader(require('./shaders/grid-point-vert.glsl'), gl.VERTEX_SHADER);
+      var fs = getShader(require('./shaders/grid-point-frag.glsl'), gl.FRAGMENT_SHADER);
+      addShaders(progcube, [vs, fs]);
 
-      var vs = getShader(require('./shaders/grid-vert.glsl'), gl.VERTEX_SHADER);
-      var fs = getShader(require('./shaders/grid-frag.glsl'), gl.FRAGMENT_SHADER);
-      addShaders(prog, [vs, fs]);
+      var u_grid2 = gl.getUniformLocation(progcube, "u_grid")
+      var u_offset2 = gl.getUniformLocation(progcube, "u_offset")
+      var u_min2 = gl.getUniformLocation(progcube, "u_min")
+      var u_max2 = gl.getUniformLocation(progcube, "u_max")
+      var u_cellSize2 = gl.getUniformLocation(progcube, "u_cellSize")
+      var u_texLength2 = gl.getUniformLocation(progcube, "u_texLength")
+      var u_viewProj2 = gl.getUniformLocation(progcube, "u_viewProj")
 
-      var u_grid = gl.getUniformLocation(prog, "u_grid")
-      var u_direction = gl.getUniformLocation(prog, "u_direction")
-      var u_count = gl.getUniformLocation(prog, "u_count")
-      var u_offset = gl.getUniformLocation(prog, "u_offset")
-      var u_min = gl.getUniformLocation(prog, "u_min")
-      var u_cellSize = gl.getUniformLocation(prog, "u_cellSize")
-      var u_texLength = gl.getUniformLocation(prog, "u_texLength")
-      var u_g = gl.getUniformLocation(prog, "u_g")
-      var u_viewProj = gl.getUniformLocation(prog, "u_viewProj")
+      var v_id = gl.getAttribLocation(progcube, "v_id")
 
-      var v_id = gl.getAttribLocation(prog, "v_id")
+      var progline = gl.createProgram()
+
+      vs = getShader(require('./shaders/grid-vert.glsl'), gl.VERTEX_SHADER);
+      fs = getShader(require('./shaders/grid-frag.glsl'), gl.FRAGMENT_SHADER);
+      addShaders(progline, [vs, fs]);
+
+      var u_grid = gl.getUniformLocation(progline, "u_grid")
+      var u_direction = gl.getUniformLocation(progline, "u_direction")
+      var u_count = gl.getUniformLocation(progline, "u_count")
+      var u_offset = gl.getUniformLocation(progline, "u_offset")
+      var u_min = gl.getUniformLocation(progline, "u_min")
+      var u_max = gl.getUniformLocation(progline, "u_max")
+      var u_cellSize = gl.getUniformLocation(progline, "u_cellSize")
+      var u_texLength = gl.getUniformLocation(progline, "u_texLength")
+      var u_g = gl.getUniformLocation(progline, "u_g")
+      var u_viewProj = gl.getUniformLocation(progline, "u_viewProj")
+
+      var v_id = gl.getAttribLocation(progline, "v_id")
 
       GridPainter = function(grid) {
-        var count = vec3.create()
-        var size = vec3.create()
-        vec3.sub(size, grid.max, grid.min)
 
-        var buf = gl.createBuffer()
-        gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+        var buf2 = gl.createBuffer()
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf2)
         let data = new Float32Array(2*grid.count[0]*grid.count[1]*grid.count[2])
         for (let i = 0; i < data.length; ++i) {
           data[i] = i;
         }
+        buf2.length = data.length
         gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
         gl.bindBuffer(gl.ARRAY_BUFFER, null)
 
-        var halfCell = 0.5*grid.cellSize
+        var buf1 = gl.createBuffer()
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf1)
+        data = new Float32Array(1*grid.count[0]*grid.count[1]*grid.count[2])
+        for (let i = 0; i < data.length; ++i) {
+          data[i] = i;
+        }
+        buf1.length = data.length
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
+        gl.bindBuffer(gl.ARRAY_BUFFER, null)
 
         function drawX() {
           gl.uniform1i(u_g, 0)
-          gl.uniform3f(u_offset, 0, halfCell, halfCell)
           gl.uniform3f(u_direction, 1, 0, 0)
-          
-          vec3.set(count, 0, halfCell, halfCell)
-          vec3.sub(count, size, count)
-          vec3.scale(count, count, 1 / grid.cellSize)
-          vec3.ceil(count, count)
-          gl.uniform3i(u_count, count[0], count[1], count[2])
 
-          gl.drawArrays(gl.LINES, 0, 2 * count[0] * count[1] * count[2])
+          gl.drawArrays(gl.LINES, 0, buf2.length)
         }
 
         function drawY() {
           gl.uniform1i(u_g, 1)
-          gl.uniform3f(u_offset, halfCell, 0, halfCell)
           gl.uniform3f(u_direction, 0, 1, 0)
 
-          vec3.set(count, halfCell, 0, halfCell)
-          vec3.sub(count, size, count)
-          vec3.scale(count, count, 1 / grid.cellSize)
-          vec3.ceil(count, count)
-          gl.uniform3i(u_count, count[0], count[1], count[2])
-
-          gl.drawArrays(gl.LINES, 0, 2 * count[0] * count[1] * count[2])
+          gl.drawArrays(gl.LINES, 0, buf2.length)
         }
 
         function drawZ() {
           gl.uniform1i(u_g, 2)
-          gl.uniform3f(u_offset, halfCell, halfCell, 0)
           gl.uniform3f(u_direction, 0, 0, 1)
 
-          vec3.set(count, halfCell, halfCell, 0)
-          vec3.sub(count, size, count)
-          vec3.scale(count, count, 1 / grid.cellSize)
-          vec3.ceil(count, count)
-          gl.uniform3i(u_count, count[0], count[1], count[2])
+          gl.drawArrays(gl.LINES, 0, buf2.length)
+        }
 
-          gl.drawArrays(gl.LINES, 0, 2 * count[0] * count[1] * count[2])
+        function drawTypes() {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buf1)
+          gl.enableVertexAttribArray(v_id)
+          gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0)
+
+          gl.drawArrays(gl.POINTS, 0, buf1.length)
+
+          gl.disableVertexAttribArray(v_id)
+
         }
 
         function draw(state) {
-          gl.useProgram(prog)
+          gl.enable(gl.BLEND)
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+          gl.useProgram(progcube)
+
+          gl.activeTexture(gl.TEXTURE0)
+          gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
+          gl.uniform1i(u_grid2, 0)
+          gl.uniform1i(u_texLength2, grid.textureLength)
+          gl.uniform3fv(u_min2, grid.min)
+          gl.uniform3fv(u_max2, grid.max)
+          gl.uniform1f(u_cellSize2, grid.cellSize)
+
+          gl.uniformMatrix4fv(u_viewProj2, false, state.cameraMat.elements);
+          
+          drawTypes()
+
+          gl.useProgram(progline)
 
           gl.activeTexture(gl.TEXTURE0)
           gl.bindTexture(gl.TEXTURE_2D, grid.A.tex)
           gl.uniform1i(u_grid, 0)
           gl.uniform1i(u_texLength, grid.textureLength)
           gl.uniform3fv(u_min, grid.min)
+          gl.uniform3fv(u_max, grid.max)
           gl.uniform1f(u_cellSize, grid.cellSize)
 
           gl.uniformMatrix4fv(u_viewProj, false, state.cameraMat.elements);
 
-          gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+          gl.bindBuffer(gl.ARRAY_BUFFER, buf2)
           gl.enableVertexAttribArray(v_id)
           gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0)
 
@@ -157,6 +187,7 @@ function Painters(gl) {
           drawZ()
 
           gl.disableVertexAttribArray(v_id)
+          gl.disable(gl.BLEND)
         }
         
         return {

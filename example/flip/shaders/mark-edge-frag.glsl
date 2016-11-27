@@ -3,19 +3,19 @@ precision highp float;
 
 uniform sampler2D u_grid;
 uniform int u_texLength;
-uniform ivec3 u_count;
+uniform vec3 u_min;
+uniform vec3 u_max;
+uniform float u_cellSize;
 
 varying vec2 f_uv;
 
+@import ./include/grid;
+
 void main() {
-    ivec2 pIdx = ivec2(float(u_texLength) * f_uv);
-    int idx = pIdx.x + pIdx.y * u_texLength;
+    ivec3 count = gridCount(vec3(0.5, 0.5, 0.5) * u_cellSize, u_max, u_min, u_cellSize);
+    ivec3 idx = UVtoXYZ(f_uv, u_texLength, count);
 
-    int z = idx / (u_count.x * u_count.y);
-    int y = (idx - z * (u_count.x * u_count.y)) / u_count.x;
-    int x = idx - y * u_count.x - z * (u_count.x * u_count.y);
-
-    if (x == 0 || y == 0 || z == 0 || x == u_count[0]-1 || y == u_count[1]-1 || z == u_count[2]-1) {
+    if (any(equal(idx, ivec3(0,0,0))) || any(equal(idx, count - 1))) {
       gl_FragColor = vec4(2.0, 2.0, 2.0, 2.0);
     } else {
       discard;
