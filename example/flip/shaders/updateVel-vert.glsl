@@ -6,13 +6,13 @@ uniform sampler2D u_gOld;
 
 uniform float u_cellSize;
 uniform vec3 u_min;
-uniform vec3 u_max;
 uniform ivec3 u_count;
 
 uniform int u_particleTexLength;
 uniform int u_gridTexLength;
 
 uniform bool u_copy;
+uniform float u_t;
 
 varying vec3 val;
 
@@ -40,28 +40,30 @@ void main() {
         gl_Position = vec4(pUV * 2.0 - 1.0, 0.0, 1.0);
     } else {
 
-        vec3 xOffset = vec3(0, u_cellSize*0.5, u_cellSize*0.5);
-        vec3 yOffset = vec3(u_cellSize*0.5, 0, u_cellSize*0.5);
-        vec3 zOffset = vec3(u_cellSize*0.5, u_cellSize*0.5, 0);
-
-        ivec3 xCount = gridCount(xOffset, u_max, u_min, u_cellSize);
-        ivec3 yCount = gridCount(yOffset, u_max, u_min, u_cellSize);
-        ivec3 zCount = gridCount(zOffset, u_max, u_min, u_cellSize);
-
         vec3 velA = vec3(
-            gridComponentInterpolate(u_gA, pos, u_min, xOffset, xCount, u_gridTexLength, u_cellSize, 0),
-            gridComponentInterpolate(u_gA, pos, u_min, yOffset, yCount, u_gridTexLength, u_cellSize, 1),
-            gridComponentInterpolate(u_gA, pos, u_min, zOffset, zCount, u_gridTexLength, u_cellSize, 2)
+            gridComponentInterpolate(u_gA, pos, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),
+            gridComponentInterpolate(u_gA, pos, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),
+            gridComponentInterpolate(u_gA, pos, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)
         );
         vec3 velB = vec3(
-            gridComponentInterpolate(u_gOld, pos, u_min, xOffset, xCount, u_gridTexLength, u_cellSize, 0),
-            gridComponentInterpolate(u_gOld, pos, u_min, yOffset, yCount, u_gridTexLength, u_cellSize, 1),
-            gridComponentInterpolate(u_gOld, pos, u_min, zOffset, zCount, u_gridTexLength, u_cellSize, 2)
+            gridComponentInterpolate(u_gOld, pos, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),
+            gridComponentInterpolate(u_gOld, pos, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),
+            gridComponentInterpolate(u_gOld, pos, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)
+        );
+
+        velA = vec3(
+            gridComponentInterpolate(u_gA, pos + velA * u_t * 0.5, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),
+            gridComponentInterpolate(u_gA, pos + velA * u_t * 0.5, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),
+            gridComponentInterpolate(u_gA, pos + velA * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)
+        );
+        velB = vec3(
+            gridComponentInterpolate(u_gOld, pos + velB * u_t * 0.5, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),
+            gridComponentInterpolate(u_gOld, pos + velB * u_t * 0.5, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),
+            gridComponentInterpolate(u_gOld, pos + velB * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)
         );
 
         // val = 0.95 * (vel + (velA - velB)) + 0.05 * velA;
         val = vel + (velA - velB);
-        // val = velA;
         gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);
     }
     

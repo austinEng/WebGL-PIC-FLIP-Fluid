@@ -1,8 +1,6 @@
 
 uniform mat4 u_viewProj;
 
-// attribute vec3 v_pos;
-// attribute vec3 v_vel;
 attribute float v_id;
 uniform sampler2D u_particles;
 uniform int u_texLength;
@@ -23,9 +21,9 @@ void main() {
     vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_texLength);
 
     vec3 v_pos = texture2D(u_particles, pUV).rgb;
-    vec3 v_vel = 10.0*abs(texture2D(u_particles, vUV).rgb);
+    vec3 v_vel = texture2D(u_particles, vUV).rgb;
 
-    f_col = v_vel; // v_pos + vec3(0.5, 0.5, 0.5);
+    f_col = clamp(vec3(0,0,1) + vec3(length(v_vel) / 0.2), vec3(0,0,0), vec3(1,1,1));
     gl_Position = u_viewProj * vec4(v_pos, 1.0);
     gl_PointSize = 3.0;
 }

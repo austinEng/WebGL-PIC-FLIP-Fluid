@@ -32,25 +32,12 @@ function Painters(gl) {
           gl.uniform1i(u_texLength, particles.textureLength)
 
           gl.uniformMatrix4fv(u_viewProj, false, state.cameraMat.elements);
-
-          // if (v_pos >= 0) gl.enableVertexAttribArray(v_pos)
-          // if (v_vel >= 0) gl.enableVertexAttribArray(v_vel)
-
-          // if (v_pos >= 0) gl.vertexAttribPointer(v_pos, 3, gl.FLOAT, false, 4 * 3 * 2, 0)
-          // if (v_vel >= 0) gl.vertexAttribPointer(v_vel, 3, gl.FLOAT, false, 4 * 3 * 2, 4 * 3)
-          // console.log(particles)
           
           gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids)
           gl.enableVertexAttribArray(v_id)
           gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0)
           gl.drawArrays(gl.POINTS, 0, particles.length)
-          // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, particles.elements)
-          // gl.drawElements(gl.POINTS, particles.length, gl.UNSIGNED_BYTE, 0)
           gl.disableVertexAttribArray(v_id)
-          // gl.drawArrays(gl.POINTS, 0, particles.length)
-
-          // if (v_pos >= 0) gl.disableVertexAttribArray(v_pos)
-          // if (v_vel >= 0) gl.disableVertexAttribArray(v_vel)
         }
 
         return {
@@ -66,9 +53,8 @@ function Painters(gl) {
       addShaders(progcube, [vs, fs]);
 
       var u_grid2 = gl.getUniformLocation(progcube, "u_grid")
-      var u_offset2 = gl.getUniformLocation(progcube, "u_offset")
       var u_min2 = gl.getUniformLocation(progcube, "u_min")
-      var u_max2 = gl.getUniformLocation(progcube, "u_max")
+      var u_count2 = gl.getUniformLocation(progcube, "u_count")
       var u_cellSize2 = gl.getUniformLocation(progcube, "u_cellSize")
       var u_texLength2 = gl.getUniformLocation(progcube, "u_texLength")
       var u_viewProj2 = gl.getUniformLocation(progcube, "u_viewProj")
@@ -86,7 +72,6 @@ function Painters(gl) {
       var u_count = gl.getUniformLocation(progline, "u_count")
       var u_offset = gl.getUniformLocation(progline, "u_offset")
       var u_min = gl.getUniformLocation(progline, "u_min")
-      var u_max = gl.getUniformLocation(progline, "u_max")
       var u_cellSize = gl.getUniformLocation(progline, "u_cellSize")
       var u_texLength = gl.getUniformLocation(progline, "u_texLength")
       var u_g = gl.getUniformLocation(progline, "u_g")
@@ -159,7 +144,7 @@ function Painters(gl) {
           gl.uniform1i(u_grid2, 0)
           gl.uniform1i(u_texLength2, grid.textureLength)
           gl.uniform3fv(u_min2, grid.min)
-          gl.uniform3fv(u_max2, grid.max)
+          gl.uniform3i(u_count2, grid.count[0], grid.count[1], grid.count[2])
           gl.uniform1f(u_cellSize2, grid.cellSize)
 
           gl.uniformMatrix4fv(u_viewProj2, false, state.cameraMat.elements);
@@ -173,7 +158,7 @@ function Painters(gl) {
           gl.uniform1i(u_grid, 0)
           gl.uniform1i(u_texLength, grid.textureLength)
           gl.uniform3fv(u_min, grid.min)
-          gl.uniform3fv(u_max, grid.max)
+          gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
           gl.uniform1f(u_cellSize, grid.cellSize)
 
           gl.uniformMatrix4fv(u_viewProj, false, state.cameraMat.elements);

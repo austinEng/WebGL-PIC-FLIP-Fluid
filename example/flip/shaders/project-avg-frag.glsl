@@ -11,5 +11,5 @@ void main() {
     if (col.w > 0.0) {
         col /= col.w;
     }
-    gl_FragColor = vec4(col.rgb, 1.0);
+    gl_FragColor = col;
 }

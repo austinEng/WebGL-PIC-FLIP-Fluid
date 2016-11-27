@@ -16,11 +16,6 @@ ivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {
     return toXYZ(idx, count);
 }
 
-ivec3 gridCount(vec3 offset, vec3 max, vec3 min, float cellSize) {
-    // return ivec3(floor((max - min - offset) / cellSize + 1.0));
-    return ivec3(floor((max - min) / cellSize + 1.0));
-}
-
 vec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {
     int flatIdx = toFlat(idx, count);
 
@@ -50,21 +45,21 @@ bool checkIdx(ivec3 idx, ivec3 count) {
     return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));
 }
 
-vec3 fractionalIndexOf(vec3 pos, vec3 min, ivec3 count, float cellSize, vec3 offset) {
-    return (pos - min - offset) / cellSize;
+vec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {
+    return (pos - min) / cellSize;
 }
 
-ivec3 indexOf(vec3 pos, vec3 min, ivec3 count, float cellSize, vec3 offset) {
-    return ivec3(floor(fractionalIndexOf(pos, min, count, cellSize, offset)));
+ivec3 indexOf(vec3 pos, vec3 min, float cellSize) {
+    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));
 }
 
-vec3 positionOf(ivec3 idx, vec3 min, vec3 offset, float cellSize) {
-    return vec3(idx)*cellSize + offset + min;
+vec3 positionOf(ivec3 idx, vec3 min, float cellSize) {
+    return vec3(idx)*cellSize + min;
 }
 
 vec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {
     
-    vec3 fIdx = fractionalIndexOf(pos, min, count, cellSize, offset);
+    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;
 
     vec3 l = floor(fIdx);
     vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));
@@ -91,7 +86,7 @@ vec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 coun
 
 float gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {
     
-    vec3 fIdx = fractionalIndexOf(pos, min, count, cellSize, offset);
+    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;
 
     vec3 l = floor(fIdx);
     vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));
