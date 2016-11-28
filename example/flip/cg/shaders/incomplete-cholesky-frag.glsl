@@ -3,25 +3,25 @@ precision highp float;
 
 uniform sampler2D u_A;
 uniform sampler2D u_K;
-uniform int u_size;
-uniform int u_tsize;
+uniform ivec2 u_size;
+uniform ivec2 u_tsize;
 uniform int u_iter;
 uniform int u_step;
 varying vec2 uv;
 
 ivec2 UVtoRC(vec2 uv) {
-    ivec2 iuv = ivec2(uv * float(u_tsize));
-    int idx = iuv.x + iuv.y * u_tsize;
-    int c = idx / u_size;
-    int r = idx - c * u_size;
+    ivec2 iuv = ivec2(uv * float(u_tsize.x));
+    int idx = iuv.x + iuv.y * u_tsize.x;
+    int c = idx / u_size.x;
+    int r = idx - c * u_size.x;
     return ivec2(r, c);
 }
 
 vec2 RCtoUV(ivec2 rc) {
-    int idx = rc.x + rc.y * u_size;
-    int y = idx / u_tsize;
-    int x = idx - y * u_tsize;
-    return vec2(x, y) / float(u_tsize);
+    int idx = rc.x + rc.y * u_size.x;
+    int y = idx / u_tsize.x;
+    int x = idx - y * u_tsize.x;
+    return vec2(x, y) / float(u_tsize.x);
 }
 
 void main() {

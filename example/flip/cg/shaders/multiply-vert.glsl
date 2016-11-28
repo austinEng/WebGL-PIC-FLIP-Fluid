@@ -4,14 +4,13 @@ uniform sampler2D u_B;
 
 uniform ivec2 u_Asize;
 uniform ivec2 u_Bsize;
-uniform ivec2 u_size;
+uniform ivec2 u_Csize;
 uniform int u_Atsize;
 uniform int u_Btsize;
-uniform int u_tsize;
+uniform int u_Ctsize;
 
-// index of multiplication. 
-// we make u_Asize.y * u_Asize.x * u_Bsize.y multiplications
-attribute float idx; 
+attribute float idx;
+
 varying vec4 result;
 
 ivec2 UVtoRC(vec2 uv, ivec2 size, int tsize) {
@@ -34,16 +33,16 @@ void main() {
 
     int midx = int(idx);                // overall multiplication index
     int ridx = midx / u_Asize.y;        // result index
-    int didx = midx - ridx * u_Asize.y  // dot product index
+    int didx = midx - ridx * u_Asize.y; // dot product index
 
-    int rc = ridx / u_size.x;
-    int rr = ridx - rc * u_size.x;
+    int rc = ridx / u_Csize.x;
+    int rr = ridx - rc * u_Csize.x;
 
     vec4 result = texture2D(u_A, RCtoUV(ivec2(rr, didx), u_Asize, u_Atsize)) * texture2D(u_B, RCtoUV(ivec2(didx, rc), u_Bsize, u_Btsize));
 
     gl_Position = vec4(vec2(
-        ridx / u_tsize,
-        ridx - (ridx / u_tsize) * u_tsize
-    ) / float(u_tsize) * 2.0 - 1.0, -1.0, 1.0);
+        ridx / u_Ctsize,
+        ridx - (ridx / u_Ctsize) * u_Ctsize
+    ) / float(u_Ctsize) * 2.0 - 1.0, -1.0, 1.0);
     gl_PointSize = 1.0;
 }
