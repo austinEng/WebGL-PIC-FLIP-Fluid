@@ -34,6 +34,10 @@ export default function(shouldUpdate, update) {
       tick(0)
     }
   }
+
+  function stop() {
+    running = false
+  }
   
   return {
     tick: function() {
@@ -42,7 +46,8 @@ export default function(shouldUpdate, update) {
         frameRequest = requestAnimationFrame(tick)
       }
     },
-    start: start,
+    start,
+    stop,
     execStats,
     frameStats
   }
