@@ -21,8 +21,17 @@ function Painters(gl) {
       var u_texLength = gl.getUniformLocation(prog, "u_texLength")
       var u_viewProj = gl.getUniformLocation(prog, "u_viewProj")
 
-      ParticlePainter = function(particles) {
+      ParticlePainter = function(_particles) {
+        var particles = _particles
+        var painter = {
+          drawParticles: true,
+          setBuffer: function(_particles) {
+            particles = _particles
+          }
+        } 
+
         function draw(state) {
+          if (!painter.drawParticles) return
           gl.useProgram(prog)
           
           gl.activeTexture(gl.TEXTURE0)
@@ -40,9 +49,9 @@ function Painters(gl) {
           gl.disableVertexAttribArray(v_id)
         }
 
-        return {
-          draw
-        }
+        painter.draw = draw
+
+        return painter
       };
     })();
 
@@ -79,27 +88,33 @@ function Painters(gl) {
 
       var v_id = gl.getAttribLocation(progline, "v_id")
 
-      GridPainter = function(grid) {
+      GridPainter = function(_grid) {
+        var grid = _grid
 
         var buf2 = gl.createBuffer()
-        gl.bindBuffer(gl.ARRAY_BUFFER, buf2)
-        let data = new Float32Array(2*grid.count[0]*grid.count[1]*grid.count[2])
-        for (let i = 0; i < data.length; ++i) {
-          data[i] = i;
-        }
-        buf2.length = data.length
-        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
-        gl.bindBuffer(gl.ARRAY_BUFFER, null)
-
         var buf1 = gl.createBuffer()
-        gl.bindBuffer(gl.ARRAY_BUFFER, buf1)
-        data = new Float32Array(1*grid.count[0]*grid.count[1]*grid.count[2])
-        for (let i = 0; i < data.length; ++i) {
-          data[i] = i;
+        
+        function setup(grid) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buf2)
+          let data = new Float32Array(2*grid.count[0]*grid.count[1]*grid.count[2])
+          for (let i = 0; i < data.length; ++i) {
+            data[i] = i;
+          }
+          buf2.length = data.length
+          gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
+          gl.bindBuffer(gl.ARRAY_BUFFER, null)
+
+          gl.bindBuffer(gl.ARRAY_BUFFER, buf1)
+          data = new Float32Array(1*grid.count[0]*grid.count[1]*grid.count[2])
+          for (let i = 0; i < data.length; ++i) {
+            data[i] = i;
+          }
+          buf1.length = data.length
+          gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
+          gl.bindBuffer(gl.ARRAY_BUFFER, null)
         }
-        buf1.length = data.length
-        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
-        gl.bindBuffer(gl.ARRAY_BUFFER, null)
+
+        if (grid) setup(grid)
 
         function drawX() {
           gl.uniform1i(u_g, 0)
@@ -133,51 +148,69 @@ function Painters(gl) {
 
         }
 
+        var painter = {
+          drawTypes: false,
+          drawX: false,
+          drawY: false,
+          drawZ: false,
+          setBuffer: function(_grid) {
+            grid = _grid
+            setup(grid)
+          }
+        }
+
         function draw(state) {
-          gl.enable(gl.BLEND)
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+          if (painter.drawTypes) {
+            gl.enable(gl.BLEND)
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-          gl.useProgram(progcube)
+            gl.useProgram(progcube)
 
-          gl.activeTexture(gl.TEXTURE0)
-          gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
-          gl.uniform1i(u_grid2, 0)
-          gl.uniform1i(u_texLength2, grid.textureLength)
-          gl.uniform3fv(u_min2, grid.min)
-          gl.uniform3i(u_count2, grid.count[0], grid.count[1], grid.count[2])
-          gl.uniform1f(u_cellSize2, grid.cellSize)
+            gl.activeTexture(gl.TEXTURE0)
+            gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
+            gl.uniform1i(u_grid2, 0)
+            gl.uniform1i(u_texLength2, grid.textureLength)
+            gl.uniform3fv(u_min2, grid.min)
+            gl.uniform3i(u_count2, grid.count[0], grid.count[1], grid.count[2])
+            gl.uniform1f(u_cellSize2, grid.cellSize)
 
-          gl.uniformMatrix4fv(u_viewProj2, false, state.cameraMat.elements);
-          
-          drawTypes()
+            gl.uniformMatrix4fv(u_viewProj2, false, state.cameraMat.elements);
+            
+            drawTypes()
 
-          gl.useProgram(progline)
+          }
 
-          gl.activeTexture(gl.TEXTURE0)
-          gl.bindTexture(gl.TEXTURE_2D, grid.A.tex)
-          gl.uniform1i(u_grid, 0)
-          gl.uniform1i(u_texLength, grid.textureLength)
-          gl.uniform3fv(u_min, grid.min)
-          gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
-          gl.uniform1f(u_cellSize, grid.cellSize)
+          if (painter.drawX || painter.drawY || painter.drawZ) {
+            gl.useProgram(progline)
 
-          gl.uniformMatrix4fv(u_viewProj, false, state.cameraMat.elements);
+            gl.activeTexture(gl.TEXTURE0)
+            gl.bindTexture(gl.TEXTURE_2D, grid.A.tex)
+            gl.uniform1i(u_grid, 0)
+            gl.uniform1i(u_texLength, grid.textureLength)
+            gl.uniform3fv(u_min, grid.min)
+            gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
+            gl.uniform1f(u_cellSize, grid.cellSize)
 
-          gl.bindBuffer(gl.ARRAY_BUFFER, buf2)
-          gl.enableVertexAttribArray(v_id)
-          gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0)
+            gl.uniformMatrix4fv(u_viewProj, false, state.cameraMat.elements);
 
-          drawX()
-          drawY()
-          drawZ()
+            gl.bindBuffer(gl.ARRAY_BUFFER, buf2)
+            gl.enableVertexAttribArray(v_id)
+            gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0)
+          }
 
-          gl.disableVertexAttribArray(v_id)
-          gl.disable(gl.BLEND)
+          if (painter.drawX) drawX()
+          if (painter.drawY) drawY()
+          if (painter.drawZ) drawZ()
+
+          if (painter.drawX || painter.drawY || painter.drawZ) {
+            gl.disableVertexAttribArray(v_id)
+            gl.disable(gl.BLEND)
+          }
         }
         
-        return {
-          draw
-        }
+        painter.draw = draw
+
+        return painter
       }
     })();
   

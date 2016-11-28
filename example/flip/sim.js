@@ -520,7 +520,8 @@ export default function (gl) {
 
                 updatePositions(t);
 
-            }
+            },
+            shouldUpdate: false
         }
     }
 

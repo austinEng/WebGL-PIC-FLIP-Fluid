@@ -8,6 +8,7 @@ import Renderer from './renderer'
 import Loop from './loop'
 import Painters from './painter'
 import _Sim from './sim'
+import DAT from 'dat-gui'
 
 const canvas = document.getElementById("canvas");
 
@@ -21,55 +22,47 @@ const {ComputeBuffer, Computation} = _Compute(gl)
 const {MACGrid} = _MAC(gl)
 const {Sim} = _Sim(gl)
 
-/*var bufA = ComputeBuffer(new Float32Array([1,2,3,4,5]), ComputeBuffer.ARRAY)
-var bufB = ComputeBuffer(new Float32Array([2,2,2,3,3]), ComputeBuffer.ARRAY)
-var bufC = ComputeBuffer(new Float32Array([1,2,3,4,5]), ComputeBuffer.TEXTURE)
-var bufD = ComputeBuffer(new Float32Array([2,2,2,3,3]), ComputeBuffer.TEXTURE)
 
-function incr(A, B) {
-  A[i] = A[i] + B[i]
-}
-
-var c1 = new Computation(incr, ComputeBuffer.ARRAY, ComputeBuffer.ARRAY)
-var c2 = new Computation(incr, ComputeBuffer.TEXTURE, ComputeBuffer.TEXTURE)*/
-
-// var Grid = new MAC(new Bound(-1, 1, -1, 1, -1, 1), 0.1)
-// console.log(Grid)
-
-var DENSITY = 100000 // particles per cubic meter
-var CELL_SIZE = 2 / Math.cbrt(DENSITY) // ~8 particles per cell
-
-var box = new BoxRegion(DENSITY, new Bound({
-  minX: -0.3, maxX: 0.3,
-  minY: 0.3, maxY: 0.5,
-  minZ: -0.3, maxZ: 0.3
-}))
-var particles = new ParticleBuffer()
-particles.addRegion(box)
-particles.create()
-
-var grid = new MACGrid(new Bound({
-  minX: -0.5, maxX: 0.5,
-  minY: -0.5, maxY: 0.6,
-  minZ: -0.5, maxZ: 0.5
-}), CELL_SIZE)
-
-var sim = Sim(grid, particles)
-
+var sim
 var renderer = Renderer(gl);
-renderer.add(ParticlePainter(particles))
-renderer.add(GridPainter(grid))
+var particlePainter = ParticlePainter(null)
+var gridPainter = GridPainter(null)
+renderer.add(gridPainter)
+renderer.add(particlePainter)
+
+function initialize(density) { 
+  var CELL_SIZE = 2 / Math.cbrt(density) // ~8 particles per cell
+  var box = new BoxRegion(density, new Bound({
+    minX: -0.3, maxX: 0.3,
+    minY: 0.3, maxY: 0.5,
+    minZ: -0.3, maxZ: 0.3
+  }))
+  var particles = new ParticleBuffer()
+  particles.addRegion(box)
+  particles.create()
+
+  var grid = new MACGrid(new Bound({
+    minX: -0.5, maxX: 0.5,
+    minY: -0.5, maxY: 0.6,
+    minZ: -0.5, maxZ: 0.5
+  }), CELL_SIZE)
+
+  particlePainter.setBuffer(particles)
+  gridPainter.setBuffer(grid)
+
+  sim = Sim(grid, particles)
+}
 
 var drawloop = Loop(
   () => {
-    return true//renderer.isDirty()
+    return sim.shouldUpdate
+    // return true//renderer.isDirty()
   },
   (t) => {
-    sim.step(10 / 60)
-    // gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-    // gl.enable(gl.DEPTH_TEST)
-    // gl.disable(gl.BLEND)
-    // gl.clearColor(0.2, 0.2, 0.2, 1.0)
+    if (sim.shouldUpdate) {
+      sim.step(10 / 60)
+    }
+
     gl.enable(gl.DEPTH_TEST)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     gl.viewport(0, 0, canvas.width, canvas.height)
@@ -89,17 +82,53 @@ drawloop.execStats.domElement.style.left = '0px';
 drawloop.execStats.domElement.style.top = '48px';
 document.body.appendChild(drawloop.execStats.domElement)
 
-// renderer.ready.then(() => {
-//   drawloop.start()
+renderer.ready.then(() => {
+  drawloop.start()
 
-//   renderer.camera.controls.addEventListener('change', e => {
-//     drawloop.start()
-//   })
+  renderer.camera.controls.addEventListener('change', e => {
+    drawloop.start()
+  })
 
-//   window.addEventListener('resize', e => {
-//     drawloop.start()
-//   })
-// })
+  window.addEventListener('resize', e => {
+    drawloop.start()
+  })
+})
+
+var simulationControls = {
+  start: function() {
+    sim.shouldUpdate = true
+    drawloop.start()
+  },
+  stop: function() {
+    sim.shouldUpdate = false
+  },
+  restart: function() {
+    var running = sim.shouldUpdate
+    initialize(simulationControls.density)
+    sim.shouldUpdate = running
+    drawloop.start()
+  },
+  density: 100000  // particles per cubic meter
+}
+
+initialize(simulationControls.density)
+
+var gui = new DAT.GUI();
+var fluidSettings = gui.addFolder('Fluid')
+fluidSettings.add(simulationControls, 'density', 100, 2000000)
+fluidSettings.open()
+var controls = gui.addFolder('Controls')
+controls.add(simulationControls, 'start')
+controls.add(simulationControls, 'stop')
+controls.add(simulationControls, 'restart')
+controls.open()
+var display = gui.addFolder('Display')
+display.add(particlePainter, 'drawParticles').onChange(drawloop.start)
+display.add(gridPainter, 'drawX').onChange(drawloop.start)
+display.add(gridPainter, 'drawY').onChange(drawloop.start)
+display.add(gridPainter, 'drawZ').onChange(drawloop.start)
+display.add(gridPainter, 'drawTypes').onChange(drawloop.start)
+display.open()
 
 import _CG from './cg'
 const CG = _CG(gl)
