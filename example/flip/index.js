@@ -89,14 +89,32 @@ drawloop.execStats.domElement.style.left = '0px';
 drawloop.execStats.domElement.style.top = '48px';
 document.body.appendChild(drawloop.execStats.domElement)
 
-renderer.ready.then(() => {
-  drawloop.start()
+// renderer.ready.then(() => {
+//   drawloop.start()
 
-  renderer.camera.controls.addEventListener('change', e => {
-    drawloop.start()
-  })
+//   renderer.camera.controls.addEventListener('change', e => {
+//     drawloop.start()
+//   })
 
-  window.addEventListener('resize', e => {
-    drawloop.start()
-  })
-})
+//   window.addEventListener('resize', e => {
+//     drawloop.start()
+//   })
+// })
+
+import _CG from './cg'
+const CG = _CG(gl)
+
+var result = CG(gl)
+  .setup(4)
+  .setA([4,-1,-1,0, -1,4,0,-1, -1,0,4,-1, 0,-1,-1,4])
+  .setb([1,2,3,4])
+console.log(result)
+result = result
+  .print(result.A)
+  .print(result.b)
+  .solve()
+  .print(result.K1)
+  .print(result.K2)
+  .print(result.Minv)
+  .print(result.x)
+console.log(result)
