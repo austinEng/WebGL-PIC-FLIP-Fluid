@@ -18,9 +18,23 @@ const ext_tex_float = gl.getExtension("OES_texture_float")
 const {ParticlePainter, GridPainter} = Painters(gl)
 
 const ParticleBuffer = _ParticleBuffer(gl)
-const {ComputeBuffer, Computation} = _Compute(gl)
+const {ComputeBuffer, ComputeStorage, Computation} = _Compute(gl)
 const {MACGrid} = _MAC(gl)
 const {Sim} = _Sim(gl)
+
+var ParticleStorage = ComputeStorage({
+  format: [{
+    pos: 3,
+  }, {
+    vel: 3
+  }],
+  type: Float32Array
+})
+
+console.log(ParticleStorage.create({
+  pos: [1,2,3],
+  vel: [0,1,0]
+}))
 
 
 var sim
