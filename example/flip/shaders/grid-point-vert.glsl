@@ -24,12 +24,12 @@ void main() {
   float v1 = v2 - 2.0 * floor(v2 / 2.0);
 
   f_col = vec4(
-    v1 >= 1.0,
-    v2 >= 2.0,
-    val.r >= 4.0,
-    0.5);
+    max(float(v1 >= 1.0), 0.1),
+    max(float(v2 >= 2.0), 0.1),
+    max(float(val.r >= 4.0), 0.1),
+    0.2);
 
   gl_Position = u_viewProj * vec4(pos, 1.0);
 
-  gl_PointSize = 3.0;
+  gl_PointSize = 10.0;
 }

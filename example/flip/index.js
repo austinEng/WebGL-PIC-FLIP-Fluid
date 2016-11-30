@@ -115,7 +115,7 @@ initialize(simulationControls.density)
 
 var gui = new DAT.GUI();
 var fluidSettings = gui.addFolder('Fluid')
-fluidSettings.add(simulationControls, 'density', 100, 2000000)
+fluidSettings.add(simulationControls, 'density')
 fluidSettings.open()
 var controls = gui.addFolder('Controls')
 controls.add(simulationControls, 'start')
