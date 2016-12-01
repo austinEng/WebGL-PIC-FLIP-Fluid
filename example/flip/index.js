@@ -28,13 +28,50 @@ var ParticleStorage = ComputeStorage({
   }, {
     vel: 3
   }],
-  type: Float32Array
+  type: Float32Array,
+  dim: 3
 })
 
-console.log(ParticleStorage.create({
-  pos: [1,2,3],
-  vel: [0,1,0]
-}))
+var particleBufferA = ComputeBuffer({
+  storage: ParticleStorage,
+  dim: [10, 10, 10],
+  data: null
+})
+
+var particleBufferB = ComputeBuffer({
+  storage: ParticleStorage,
+  dim: [10, 10, 10],
+  data: null
+})
+
+particleBufferA.setData([{
+  pos: [1,5,6],
+  vel: [0,0,0]
+},
+{
+  pos: [2,1,3],
+  vel: [0,0,0]
+}])
+
+var gravityUpdate = Computation({
+  func: `particlesB[index].vel = particlesA[index].vel - 9.81*t`,
+  inputs: {
+    particlesA: ParticleStorage,
+    t: '1f'
+  },
+  outputs: {
+    particlesB: ParticleStorage
+  }
+})
+
+gravityUpdate.generate().setup({
+  inputs: {
+    particlesA: particleBufferA
+  },
+  outputs: {
+    particlesB: particleBufferB
+  }
+})
 
 
 var sim
@@ -144,6 +181,7 @@ display.add(gridPainter, 'drawZ').onChange(drawloop.start)
 display.add(gridPainter, 'drawTypes').onChange(drawloop.start)
 display.open()
 
+/*
 import _CG from './cg'
 const CG = _CG(gl)
 
@@ -161,3 +199,4 @@ result = result
   .print(result.Minv)
   .print(result.x)
 console.log(result)
+*/
