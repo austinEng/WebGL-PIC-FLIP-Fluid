@@ -85,6 +85,7 @@ function Painters(gl) {
       var u_texLength = gl.getUniformLocation(progline, "u_texLength")
       var u_g = gl.getUniformLocation(progline, "u_g")
       var u_viewProj = gl.getUniformLocation(progline, "u_viewProj")
+      var u_mode = gl.getUniformLocation(progline, "u_mode")
 
       var v_id = gl.getAttribLocation(progline, "v_id")
 
@@ -150,6 +151,8 @@ function Painters(gl) {
 
         var painter = {
           drawTypes: false,
+          drawA: false,
+          drawMIC: true,
           drawX: false,
           drawY: false,
           drawZ: false,
@@ -160,23 +163,44 @@ function Painters(gl) {
         }
 
         function draw(state) {
-          if (painter.drawTypes) {
+          if (painter.drawTypes || painter.drawA || painter.drawMIC) {
             gl.enable(gl.BLEND)
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
             gl.useProgram(progcube)
 
-            gl.activeTexture(gl.TEXTURE0)
-            gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
             gl.uniform1i(u_grid2, 0)
             gl.uniform1i(u_texLength2, grid.textureLength)
             gl.uniform3fv(u_min2, grid.min)
             gl.uniform3i(u_count2, grid.count[0], grid.count[1], grid.count[2])
             gl.uniform1f(u_cellSize2, grid.cellSize)
-
             gl.uniformMatrix4fv(u_viewProj2, false, state.cameraMat.elements);
-            
-            drawTypes()
+
+            gl.activeTexture(gl.TEXTURE0)
+            if (painter.drawTypes) {
+              gl.uniform1i(u_mode, 0)
+              gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
+
+              drawTypes()
+            }
+            if (painter.drawA) {
+              gl.uniform1i(u_mode, 1)
+              gl.bindTexture(gl.TEXTURE_2D, grid.P.tex)
+
+              drawTypes()
+            }
+            if (painter.drawb) {
+              gl.uniform1i(u_mode, 1)
+              gl.bindTexture(gl.TEXTURE_2D, grid.b.tex)
+
+              drawTypes()
+            }
+            if (painter.drawMIC) {
+              gl.uniform1i(u_mode, 1)
+              gl.bindTexture(gl.TEXTURE_2D, grid.MIC1.tex)
+
+              drawTypes()
+            }
 
           }
 

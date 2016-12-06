@@ -16,6 +16,13 @@ ivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {
     return toXYZ(idx, count);
 }
 
+vec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {
+    int i = toFlat(idx, count);
+    int v = i / texLength;
+    int u = i - v * texLength;
+    return vec2(u, v) / float(texLength);
+}
+
 vec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {
     int flatIdx = toFlat(idx, count);
 

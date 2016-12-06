@@ -90,8 +90,28 @@ export default function (gl) {
       }
 
       this.P = {
-        tex: this.A.tex,
-        fbo: this.A.fbo
+        tex: gl.createTexture(),
+        fbo: gl.createFramebuffer()
+      }
+
+      this.MIC1 = {
+        tex: gl.createTexture(),
+        fbo: gl.createFramebuffer()
+      }
+
+      this.MIC2 = {
+        tex: gl.createTexture(),
+        fbo: gl.createFramebuffer()
+      }
+
+      this.PCG1 = {
+        tex: gl.createTexture(),
+        fbo: gl.createFramebuffer()
+      }
+
+      this.PCG2 = {
+        tex: gl.createTexture(),
+        fbo: gl.createFramebuffer()
       }
 
       this.Type = {
@@ -141,6 +161,61 @@ export default function (gl) {
       gl.bindTexture(gl.TEXTURE_2D, null)
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.T.fbo)
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.T.tex, 0)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      
+      gl.bindTexture(gl.TEXTURE_2D, this.P.tex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      gl.bindTexture(gl.TEXTURE_2D, null)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.P.fbo)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.P.tex, 0)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+      gl.bindTexture(gl.TEXTURE_2D, this.MIC1.tex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      gl.bindTexture(gl.TEXTURE_2D, null)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.MIC1.fbo)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.MIC1.tex, 0)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+      gl.bindTexture(gl.TEXTURE_2D, this.MIC2.tex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      gl.bindTexture(gl.TEXTURE_2D, null)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.MIC2.fbo)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.MIC2.tex, 0)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+      gl.bindTexture(gl.TEXTURE_2D, this.PCG1.tex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      gl.bindTexture(gl.TEXTURE_2D, null)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.PCG1.fbo)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.PCG1.tex, 0)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+      gl.bindTexture(gl.TEXTURE_2D, this.PCG2.tex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      gl.bindTexture(gl.TEXTURE_2D, null)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.PCG2.fbo)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.PCG2.tex, 0)
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
       console.log(this)

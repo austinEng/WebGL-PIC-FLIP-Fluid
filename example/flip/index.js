@@ -134,6 +134,7 @@ drawloop.execStats.domElement.style.top = '48px';
 document.body.appendChild(drawloop.execStats.domElement)
 
 renderer.ready.then(() => {
+  sim.shouldUpdate = true
   drawloop.start()
 
   renderer.camera.controls.addEventListener('change', e => {
@@ -179,6 +180,9 @@ display.add(gridPainter, 'drawX').onChange(drawloop.start)
 display.add(gridPainter, 'drawY').onChange(drawloop.start)
 display.add(gridPainter, 'drawZ').onChange(drawloop.start)
 display.add(gridPainter, 'drawTypes').onChange(drawloop.start)
+display.add(gridPainter, 'drawA').onChange(drawloop.start)
+display.add(gridPainter, 'drawb').onChange(drawloop.start)
+display.add(gridPainter, 'drawMIC').onChange(drawloop.start)
 display.open()
 
 /*

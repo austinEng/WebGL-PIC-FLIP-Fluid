@@ -5,6 +5,7 @@ uniform vec3 u_min;
 uniform float u_cellSize;
 uniform mat4 u_viewProj;
 uniform int u_texLength;
+uniform int u_mode;
 
 attribute float v_id;
 
@@ -20,14 +21,18 @@ void main() {
 
   vec4 val = gridAt(u_grid, idx, u_count, u_texLength);
 
-  float v2 = val.r - 4.0 * floor(val.r / 4.0);
-  float v1 = v2 - 2.0 * floor(v2 / 2.0);
+  if (u_mode == 0) {
+    float v2 = val.r - 4.0 * floor(val.r / 4.0);
+    float v1 = v2 - 2.0 * floor(v2 / 2.0);
 
-  f_col = vec4(
+    f_col = vec4(
     max(float(v1 >= 1.0), 0.1),
     max(float(v2 >= 2.0), 0.1),
     max(float(val.r >= 4.0), 0.1),
     0.2);
+  } else if (u_mode == 1) {
+    f_col = abs(val);
+  }
 
   gl_Position = u_viewProj * vec4(pos, 1.0);
 
