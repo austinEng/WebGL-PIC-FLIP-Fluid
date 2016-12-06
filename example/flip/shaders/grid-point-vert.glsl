@@ -6,6 +6,7 @@ uniform float u_cellSize;
 uniform mat4 u_viewProj;
 uniform int u_texLength;
 uniform int u_mode;
+uniform int u_c;
 
 attribute float v_id;
 
@@ -31,7 +32,14 @@ void main() {
     max(float(val.r >= 4.0), 0.1),
     0.2);
   } else if (u_mode == 1) {
-    f_col = abs(val);
+    f_col = vec4(vec3(abs(val)), 0.2);
+  } else if (u_mode == 2) {
+    for (int i = 0; i < 3; ++i) {
+      if (i == u_c) {
+        f_col = vec4(vec3(abs(val[i])), 0.2);   
+        break;
+      }
+    }
   }
 
   gl_Position = u_viewProj * vec4(pos, 1.0);

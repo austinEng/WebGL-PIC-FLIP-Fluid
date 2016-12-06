@@ -67,6 +67,8 @@ function Painters(gl) {
       var u_cellSize2 = gl.getUniformLocation(progcube, "u_cellSize")
       var u_texLength2 = gl.getUniformLocation(progcube, "u_texLength")
       var u_viewProj2 = gl.getUniformLocation(progcube, "u_viewProj")
+      var u_mode = gl.getUniformLocation(progcube, "u_mode")
+      var u_c = gl.getUniformLocation(progcube, "u_c")
 
       var v_id = gl.getAttribLocation(progcube, "v_id")
 
@@ -85,7 +87,6 @@ function Painters(gl) {
       var u_texLength = gl.getUniformLocation(progline, "u_texLength")
       var u_g = gl.getUniformLocation(progline, "u_g")
       var u_viewProj = gl.getUniformLocation(progline, "u_viewProj")
-      var u_mode = gl.getUniformLocation(progline, "u_mode")
 
       var v_id = gl.getAttribLocation(progline, "v_id")
 
@@ -152,7 +153,8 @@ function Painters(gl) {
         var painter = {
           drawTypes: false,
           drawA: false,
-          drawMIC: true,
+          drawb: true,
+          drawMIC: false,
           drawX: false,
           drawY: false,
           drawZ: false,
@@ -163,7 +165,7 @@ function Painters(gl) {
         }
 
         function draw(state) {
-          if (painter.drawTypes || painter.drawA || painter.drawMIC) {
+          if (painter.drawTypes || painter.drawA || painter.drawMIC || painter.drawb) {
             gl.enable(gl.BLEND)
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -190,8 +192,9 @@ function Painters(gl) {
               drawTypes()
             }
             if (painter.drawb) {
-              gl.uniform1i(u_mode, 1)
-              gl.bindTexture(gl.TEXTURE_2D, grid.b.tex)
+              gl.uniform1i(u_mode, 2)
+              gl.uniform1i(u_c, 1)
+              gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex)
 
               drawTypes()
             }
