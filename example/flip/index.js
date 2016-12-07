@@ -192,8 +192,6 @@ display.add(gridPainter, 'drawz').onChange(drawloop.start)
 display.add(gridPainter, 'drawMIC').onChange(drawloop.start)
 display.open()
 
-gui.remember()
-
 /*
 import _CG from './cg'
 const CG = _CG(gl)

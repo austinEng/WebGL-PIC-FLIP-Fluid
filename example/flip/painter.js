@@ -200,9 +200,9 @@ function Painters(gl) {
         var painter = {
           debugValues: true,
           drawTypes: false,
-          drawA: false,
+          drawA: true,
           drawb: false,
-          drawz: true,
+          drawz: false,
           drawMIC: false,
           drawX: false,
           drawY: false,

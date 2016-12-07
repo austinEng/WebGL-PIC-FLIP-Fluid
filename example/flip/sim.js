@@ -340,7 +340,7 @@ export default function (gl) {
                 var u_scale = gl.getUniformLocation(prog, "u_scale")
                 var v_id = gl.getAttribLocation(prog, "v_id")
 
-                var pointCount = grid.count[0]*grid.count[1]*grid.count[2]
+                var pointCount = 6*grid.count[0]*grid.count[1]*grid.count[2]
                 var pointBuffer = gl.createBuffer()
                 gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer)
                 var data = new Float32Array(pointCount)
