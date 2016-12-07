@@ -14,7 +14,7 @@ void main() {
 
   int id = int(v_id);
 
-  ivec3 idx = toXYZ(id / 6, u_count);
+  ivec3 idx = toXYZ(id, u_count);
   
   // if (idx.x >= u_count.x - 1 || 
   //     idx.y >= u_count.y - 1 || 
@@ -51,9 +51,9 @@ void main() {
   float typeB = gridAt(u_types, idx + offset, u_count, u_textureLength)[0];
 
   if (isPlusGrid) {
-    gl_Position = vec4(XYZtoUV(idx + offset, u_textureLength, u_count), 0.0, 1.0);
+    gl_Position = vec4(XYZtoUV(idx + offset, u_textureLength, u_count) * 2.0 - 1.0, 0.0, 1.0);
   } else {
-    gl_Position = vec4(XYZtoUV(idx, u_textureLength, u_count), 0.0, 1.0);
+    gl_Position = vec4(XYZtoUV(idx, u_textureLength, u_count) * 2.0 - 1.0, 0.0, 1.0);
   }
 
   if (typeA == 1.0 && typeB == 1.0) {

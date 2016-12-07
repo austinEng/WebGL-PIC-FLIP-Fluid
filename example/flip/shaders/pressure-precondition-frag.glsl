@@ -3,6 +3,7 @@ precision highp float;
 
 uniform sampler2D u_A;
 uniform sampler2D u_Pre;
+uniform sampler2D u_types;
 uniform int u_texLength;
 uniform int u_iter;
 uniform ivec3 u_count;
@@ -14,6 +15,7 @@ varying vec2 f_uv;
 #define GET(grid, uv, c) (uv.x < 0.0 ? 0.0 : texture2D(grid, uv)[c])
 
 void main() {
+    if (texture2D(u_types, f_uv)[0] != 1.0) discard;
     ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
     if (idx.x > u_iter || idx.y > u_iter || idx.z > u_iter) discard;
 

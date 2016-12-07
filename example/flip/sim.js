@@ -326,7 +326,7 @@ export default function (gl) {
             }
         })()
 
-        var pressureSolve = (function(t) {
+        var pressureSolve = (function() {
             var setupA = (function() {
                 var prog = gl.createProgram()
                 
@@ -340,7 +340,7 @@ export default function (gl) {
                 var u_scale = gl.getUniformLocation(prog, "u_scale")
                 var v_id = gl.getAttribLocation(prog, "v_id")
 
-                var pointCount = 6*grid.count[0]*grid.count[1]*grid.count[2]
+                var pointCount = grid.count[0]*grid.count[1]*grid.count[2]
                 var pointBuffer = gl.createBuffer()
                 gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer)
                 var data = new Float32Array(pointCount)
@@ -348,7 +348,7 @@ export default function (gl) {
                 gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
                 gl.bindBuffer(gl.ARRAY_BUFFER, null)
 
-                return function() {
+                return function(t) {
                     gl.useProgram(prog)
 
                     gl.activeTexture(gl.TEXTURE0)
@@ -356,8 +356,7 @@ export default function (gl) {
                     gl.uniform1i(u_types, 0)
                     gl.uniform1i(u_texLength, grid.textureLength)
                     gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
-                    // gl.uniform1f(u_scale, t / grid.cellSize*grid.cellSize)
-                    gl.uniform1f(u_scale, 0.2)
+                    gl.uniform1f(u_scale, t / grid.cellSize*grid.cellSize)
 
                     gl.bindFramebuffer(gl.FRAMEBUFFER, grid.P.fbo)
                     gl.clearColor(0,0,0,0)
@@ -370,9 +369,9 @@ export default function (gl) {
                     gl.enableVertexAttribArray(v_id)
                     gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0)
                     gl.drawArrays(gl.POINTS, 0, pointCount)
+                    gl.disableVertexAttribArray(v_id)
                     gl.bindBuffer(gl.ARRAY_BUFFER, null)
                     gl.disable(gl.BLEND)
-                    gl.disableVertexAttribArray(v_id)
                 }
             })()
 
@@ -399,7 +398,7 @@ export default function (gl) {
                     gl.uniform1i(u_types, 0)
                     gl.activeTexture(gl.TEXTURE1)
                     gl.bindTexture(gl.TEXTURE_2D, grid.A.tex)
-                    gl.uniform1i(u_types, 1)
+                    gl.uniform1i(u_A, 1)
                     gl.uniform1i(u_texLength, grid.textureLength)
                     gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
                     gl.uniform1f(u_scale, 1 / grid.cellSize)
@@ -432,6 +431,7 @@ export default function (gl) {
                 var u_count = gl.getUniformLocation(prog, "u_count")
                 var u_A = gl.getUniformLocation(prog, "u_A")
                 var u_Pre = gl.getUniformLocation(prog, "u_Pre")
+                var u_types = gl.getUniformLocation(prog, "u_types")
                 var u_iter = gl.getUniformLocation(prog, "u_iter")
 
                 return function() {
@@ -440,6 +440,9 @@ export default function (gl) {
                     gl.activeTexture(gl.TEXTURE0)
                     gl.bindTexture(gl.TEXTURE_2D, grid.P.tex)
                     gl.uniform1i(u_A, 0)
+                    gl.activeTexture(gl.TEXTURE2)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
+                    gl.uniform1i(u_types, 2)
                     gl.uniform1i(u_texLength, grid.textureLength)
                     gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
                     
@@ -508,9 +511,6 @@ export default function (gl) {
 
 
                     var temp
-                    // temp = grid.PCG1
-                    // grid.PCG1 = grid.PCG2
-                    // grid.PCG2 = temp
 
                     var N = Math.max(Math.max(grid.count[0], grid.count[1]), grid.count[2]);
                     gl.activeTexture(gl.TEXTURE2)
@@ -540,19 +540,15 @@ export default function (gl) {
                         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
                     }
 
-                    // temp = grid.PCG1
-                    // grid.PCG1 = grid.PCG2
-                    // grid.PCG2 = temp
-
                     gl.disableVertexAttribArray(v_pos)
                 }
             })()
 
-            return function() {
-                setupA()
+            return function(t) {
+                setupA(t)
                 setupb()
                 precondition()
-                updateZ()
+                //updateZ()
             }
         })()
 
@@ -738,7 +734,7 @@ export default function (gl) {
 
                 enforceBoundary();
 
-                pressureSolve();
+                pressureSolve(t);
 
                 enforceBoundary();
 

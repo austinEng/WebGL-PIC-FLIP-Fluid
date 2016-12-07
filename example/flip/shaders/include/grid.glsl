@@ -20,30 +20,20 @@ vec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {
     int i = toFlat(idx, count);
     int v = i / texLength;
     int u = i - v * texLength;
-    return vec2(u, v) / float(texLength);
+    return (vec2(u, v) + 0.01) / float(texLength);
 }
 
 vec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {
-    int flatIdx = toFlat(idx, count);
-
-    int gV = flatIdx / texLength;
-    int gU = flatIdx - gV * texLength;
-
-    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);
+    vec2 uv = XYZtoUV(idx, texLength, count);
     
-    return texture2D(grid, gUV);
+    return texture2D(grid, uv);
 }
 
 float gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {
-    int flatIdx = toFlat(idx, count);
-
-    int gV = flatIdx / texLength;
-    int gU = flatIdx - gV * texLength;
-
-    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);
+    vec2 uv = XYZtoUV(idx, texLength, count);
     
     for (int i = 0; i < 4; ++i) {
-        if (i == c) return texture2D(grid, gUV)[i];
+        if (i == c) return texture2D(grid, uv)[i];
     }
     return 0.0;
 }
