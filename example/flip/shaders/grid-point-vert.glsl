@@ -42,7 +42,9 @@ void main() {
     }
   }
 
-  gl_Position = u_viewProj * vec4(pos, 1.0);
+  vec4 p = u_viewProj * vec4(pos, 1.0);
+  p /= p[3];
+  gl_Position = p;
 
   gl_PointSize = 10.0;
 }

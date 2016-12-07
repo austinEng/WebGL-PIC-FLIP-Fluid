@@ -1,5 +1,5 @@
 'use strict'
-
+const THREE = require('three')
 import {vec3} from 'gl-matrix'
 
 function Painters(gl) {
@@ -95,7 +95,8 @@ function Painters(gl) {
 
         var buf2 = gl.createBuffer()
         var buf1 = gl.createBuffer()
-        
+        var readBuffer;
+
         function setup(grid) {
           gl.bindBuffer(gl.ARRAY_BUFFER, buf2)
           let data = new Float32Array(2*grid.count[0]*grid.count[1]*grid.count[2])
@@ -114,6 +115,8 @@ function Painters(gl) {
           buf1.length = data.length
           gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
           gl.bindBuffer(gl.ARRAY_BUFFER, null)
+
+          readBuffer = new Float32Array(grid.textureLength * grid.textureLength * 4)
         }
 
         if (grid) setup(grid)
@@ -150,10 +153,58 @@ function Painters(gl) {
 
         }
 
+        function addLabels(fbo, offset, state) {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+          gl.readPixels(0, 0, grid.textureLength, grid.textureLength, gl.RGBA, gl.FLOAT, readBuffer)
+
+          for (let idx = 0; idx < readBuffer.length / 4; ++idx) {
+            let z = Math.floor(idx / (grid.count[0] * grid.count[1]));
+            let y = Math.floor((idx - z * (grid.count[0] * grid.count[1])) / grid.count[0]);
+            let x = idx - y * grid.count[0] - z * (grid.count[0] * grid.count[1]);
+
+            let pos = new THREE.Vector3(
+              (offset[0]*0 + x)*grid.cellSize + grid.min[0],
+              (offset[1]*0 + y)*grid.cellSize + grid.min[1],
+              (offset[2]*0 + z)*grid.cellSize + grid.min[2],
+            )
+            .project(state.camera)
+            .add(new THREE.Vector3(1, 1, 0))
+            .multiply(new THREE.Vector3(0.5*window.innerWidth, 0.5*window.innerHeight, 1))
+
+
+            // var dist = (pos.z - 0.99) / 0.01
+            // var dist = 1 - pos.z / 2
+
+            let label = document.createElement('span')
+            let text = document.createTextNode(
+              readBuffer[idx*4 + 0] + ", " +
+              readBuffer[idx*4 + 1] + ", " +
+              readBuffer[idx*4 + 2] + ", " +
+              readBuffer[idx*4 + 3]
+            )
+            label.appendChild(text)
+            label.style.position = 'absolute'
+            label.style.left = pos.x
+            label.style.top = window.innerWidth - pos.y
+            // label.style.backgroundColor = "#333"
+            // label.style.color = `rgb(${Math.floor(255*dist)}, ${Math.floor(255*dist)}, ${Math.floor(255*dist)})`
+            label.style.color = "white"
+            label.style.padding = "1px"
+            label.style.fontSize = "8px"
+            label.style.userSelect = "none"
+            // label.style.transform = `scale(${1 - pos[2]})`
+            label.className = 'grid-label'
+            document.body.appendChild(label)
+          } 
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+        }
+
         var painter = {
+          debugValues: true,
           drawTypes: false,
           drawA: false,
-          drawb: true,
+          drawb: false,
+          drawz: true,
           drawMIC: false,
           drawX: false,
           drawY: false,
@@ -165,7 +216,16 @@ function Painters(gl) {
         }
 
         function draw(state) {
-          if (painter.drawTypes || painter.drawA || painter.drawMIC || painter.drawb) {
+          let els = document.getElementsByClassName('grid-label')
+          while (els[0]) {
+            els[0].parentNode.removeChild(els[0])
+          }
+
+          if (painter.drawTypes || 
+              painter.drawA || 
+              painter.drawMIC || 
+              painter.drawb || 
+              painter.drawz) {
             gl.enable(gl.BLEND)
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -184,12 +244,14 @@ function Painters(gl) {
               gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
 
               drawTypes()
+              if (painter.debugValues) addLabels(grid.T.fbo, [0.5, 0.5, 0.5], state)
             }
             if (painter.drawA) {
               gl.uniform1i(u_mode, 1)
               gl.bindTexture(gl.TEXTURE_2D, grid.P.tex)
 
               drawTypes()
+              if (painter.debugValues) addLabels(grid.P.fbo, [0.5, 0.5, 0.5], state)
             }
             if (painter.drawb) {
               gl.uniform1i(u_mode, 2)
@@ -197,12 +259,22 @@ function Painters(gl) {
               gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex)
 
               drawTypes()
+              if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state)
+            }
+            if (painter.drawz) {
+              gl.uniform1i(u_mode, 2)
+              gl.uniform1i(u_c, 2)
+              gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex)
+
+              drawTypes()
+              if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state)
             }
             if (painter.drawMIC) {
               gl.uniform1i(u_mode, 1)
               gl.bindTexture(gl.TEXTURE_2D, grid.MIC1.tex)
 
               drawTypes()
+              if (painter.debugValues) addLabels(grid.MIC1.fbo, [0.5, 0.5, 0.5], state)
             }
 
           }

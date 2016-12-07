@@ -506,11 +506,19 @@ export default function (gl) {
                     gl.enableVertexAttribArray(v_pos)
                     gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0)
 
+
+                    var temp
+                    // temp = grid.PCG1
+                    // grid.PCG1 = grid.PCG2
+                    // grid.PCG2 = temp
+
                     var N = Math.max(Math.max(grid.count[0], grid.count[1]), grid.count[2]);
                     gl.activeTexture(gl.TEXTURE2)
-                    gl.uniform1i(u_pre, 2)
+                    gl.uniform1i(u_pcg, 2)
+
+                    gl.uniform1i(u_step, 0)
                     for (var i = 0; i < N; ++i) {
-                        var temp = grid.PCG1
+                        temp = grid.PCG1
                         grid.PCG1 = grid.PCG2
                         grid.PCG2 = temp
 
@@ -520,8 +528,9 @@ export default function (gl) {
                         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
                     }
 
+                    gl.uniform1i(u_step, 1)
                     for (var i = N-1; i >= 0; --i) {
-                        var temp = grid.PCG1
+                        temp = grid.PCG1
                         grid.PCG1 = grid.PCG2
                         grid.PCG2 = temp
 
@@ -530,6 +539,10 @@ export default function (gl) {
                         gl.uniform1i(u_iter, i)
                         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
                     }
+
+                    // temp = grid.PCG1
+                    // grid.PCG1 = grid.PCG2
+                    // grid.PCG2 = temp
 
                     gl.disableVertexAttribArray(v_pos)
                 }
@@ -539,7 +552,7 @@ export default function (gl) {
                 setupA()
                 setupb()
                 precondition()
-                // updateZ()
+                updateZ()
             }
         })()
 

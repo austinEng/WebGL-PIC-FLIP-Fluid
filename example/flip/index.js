@@ -134,7 +134,7 @@ drawloop.execStats.domElement.style.top = '48px';
 document.body.appendChild(drawloop.execStats.domElement)
 
 renderer.ready.then(() => {
-  sim.shouldUpdate = true
+  // sim.shouldUpdate = true
   drawloop.start()
 
   renderer.camera.controls.addEventListener('change', e => {
@@ -160,7 +160,11 @@ var simulationControls = {
     sim.shouldUpdate = running
     drawloop.start()
   },
-  density: 100000  // particles per cubic meter
+  step: function() {
+    sim.step(10/60)
+    drawloop.start()
+  },
+  density: 1000  // particles per cubic meter
 }
 
 initialize(simulationControls.density)
@@ -173,8 +177,10 @@ var controls = gui.addFolder('Controls')
 controls.add(simulationControls, 'start')
 controls.add(simulationControls, 'stop')
 controls.add(simulationControls, 'restart')
+controls.add(simulationControls, 'step')
 controls.open()
 var display = gui.addFolder('Display')
+display.add(gridPainter, 'debugValues', true).onChange(drawloop.start)
 display.add(particlePainter, 'drawParticles').onChange(drawloop.start)
 display.add(gridPainter, 'drawX').onChange(drawloop.start)
 display.add(gridPainter, 'drawY').onChange(drawloop.start)
@@ -182,8 +188,11 @@ display.add(gridPainter, 'drawZ').onChange(drawloop.start)
 display.add(gridPainter, 'drawTypes').onChange(drawloop.start)
 display.add(gridPainter, 'drawA').onChange(drawloop.start)
 display.add(gridPainter, 'drawb').onChange(drawloop.start)
+display.add(gridPainter, 'drawz').onChange(drawloop.start)
 display.add(gridPainter, 'drawMIC').onChange(drawloop.start)
 display.open()
+
+gui.remember()
 
 /*
 import _CG from './cg'

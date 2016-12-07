@@ -45,6 +45,7 @@ export default function Renderer(gl) {
     
     for (let i = 0; i < drawables.length; ++i) {
       drawables[i].draw({
+        camera,
         cameraMat: cameraMat,
         projMat: camera.projectionMatrix,
         viewMat: camera.matrixWorldInverse,
