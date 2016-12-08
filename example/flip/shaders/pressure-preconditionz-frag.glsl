@@ -11,6 +11,7 @@ uniform int u_texLength;
 
 uniform int u_step;
 uniform int u_iter;
+uniform bool u_setS;
 
 varying vec2 f_uv;
 
@@ -44,6 +45,7 @@ void main() {
         - texture2D(u_A, f_uv)[1] * texture2D(u_pre, f_uv)[0] * texture2D(u_pcg, mJ)[2]
         - texture2D(u_A, f_uv)[2] * texture2D(u_pre, f_uv)[0] * texture2D(u_pcg, mK)[2];
       curr[2] = t * texture2D(u_pre, f_uv)[0];
+      if (u_setS) curr[3] = curr[2];
     }
     gl_FragColor = curr;
 
