@@ -200,9 +200,12 @@ function Painters(gl) {
         var painter = {
           debugValues: true,
           drawTypes: false,
-          drawA: true,
+          drawA: false,
           drawb: false,
+          drawp: true,
+          drawr: false,
           drawz: false,
+          draws: false,
           drawMIC: false,
           drawX: false,
           drawY: false,
@@ -222,8 +225,11 @@ function Painters(gl) {
           if (painter.drawTypes || 
               painter.drawA || 
               painter.drawMIC || 
+              painter.drawp || 
               painter.drawb || 
-              painter.drawz) {
+              painter.drawr || 
+              painter.drawz ||
+              painter.draws) {
             gl.enable(gl.BLEND)
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -251,7 +257,23 @@ function Painters(gl) {
               drawTypes()
               if (painter.debugValues) addLabels(grid.P.fbo, [0.5, 0.5, 0.5], state, [0,1,2,3])
             }
+            if (painter.drawp) {
+              gl.uniform1i(u_mode, 2)
+              gl.uniform1i(u_c, 0)
+              gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex)
+
+              drawTypes()
+              if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state, [0])
+            }
             if (painter.drawb) {
+              gl.uniform1i(u_mode, 2)
+              gl.uniform1i(u_c, 1)
+              gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex)
+
+              drawTypes()
+              if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state, [1])
+            }
+            if (painter.drawr) {
               gl.uniform1i(u_mode, 2)
               gl.uniform1i(u_c, 1)
               gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex)
@@ -266,6 +288,14 @@ function Painters(gl) {
 
               drawTypes()
               if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state, [2])
+            }
+            if (painter.draws) {
+              gl.uniform1i(u_mode, 2)
+              gl.uniform1i(u_c, 3)
+              gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex)
+
+              drawTypes()
+              if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state, [3])
             }
             if (painter.drawMIC) {
               gl.uniform1i(u_mode, 1)

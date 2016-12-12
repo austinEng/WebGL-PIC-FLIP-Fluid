@@ -20,14 +20,15 @@ void main() {
   ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
   // ivec3 idx = toXYZ(id / 6, u_count);
   
-  // if (gridAt(u_types, idx, u_count, u_texLength)[0] != 1.0) {
-  //   discard;
-  // }
-  if (idx.x >= u_count.x - 1 || 
-      idx.y >= u_count.y - 1 || 
-      idx.z >= u_count.z - 1) {
-        discard;
-      }
+  if (gridAt(u_types, idx, u_count, u_texLength)[0] != 1.0) {
+    discard;
+  }
+
+  // if (idx.x >= u_count.x - 1 || 
+  //     idx.y >= u_count.y - 1 || 
+  //     idx.z >= u_count.z - 1) {
+  //       discard;
+  //     }
 
   vec2 pI = XYZtoUV(idx + ivec3(1,0,0), u_texLength, u_count);
   vec2 pJ = XYZtoUV(idx + ivec3(0,1,0), u_texLength, u_count);
@@ -65,7 +66,7 @@ void main() {
   //   offset = ivec3(0,0,1);
   // }
 
-  // if (gridAt(u_types, idx + offset, u_count, u_textureLength)[0] == 2.0) {
+  // if (gridAt(u_types, idx + offset, u_count, u_texLength)[0] == 2.0) {
 
   // }
 }

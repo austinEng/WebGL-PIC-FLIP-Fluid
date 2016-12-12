@@ -2,7 +2,7 @@
 attribute float v_id;
 uniform ivec3 u_count;
 uniform sampler2D u_types;
-uniform int u_textureLength;
+uniform int u_texLength;
 uniform float u_scale;
 varying vec4 val;
 varying float keep;
@@ -51,13 +51,19 @@ void main() {
     isPlusGrid = true;
   }
 
-  float typeA = gridAt(u_types, idx, u_count, u_textureLength)[0];
-  float typeB = gridAt(u_types, idx + offset, u_count, u_textureLength)[0];
+  float typeA = gridAt(u_types, idx, u_count, u_texLength)[0];
+  float typeB = gridAt(u_types, idx + offset, u_count, u_texLength)[0];
+  if (!checkIdx(idx + offset, u_count)) {
+    typeB = -1.0;
+    if (isPlusGrid) {
+      keep = 0.0;
+    }
+  }
 
   if (isPlusGrid) {
-    gl_Position = vec4(XYZtoUV(idx + offset, u_textureLength, u_count) * 2.0 - 1.0, 0.0, 1.0);
+    gl_Position = vec4(XYZtoUV(idx + offset, u_texLength, u_count) * 2.0 - 1.0, 0.0, 1.0);
   } else {
-    gl_Position = vec4(XYZtoUV(idx, u_textureLength, u_count) * 2.0 - 1.0, 0.0, 1.0);
+    gl_Position = vec4(XYZtoUV(idx, u_texLength, u_count) * 2.0 - 1.0, 0.0, 1.0);
   }
 
   if (typeA == 1.0 && typeB == 1.0) {

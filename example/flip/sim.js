@@ -333,6 +333,11 @@ export default function (gl) {
                 fbo: gl.createFramebuffer()
             }
 
+            var tempTex2 = {
+                tex: gl.createTexture(),
+                fbo: gl.createFramebuffer()
+            }
+
             gl.bindTexture(gl.TEXTURE_2D, tempTex.tex)
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.FLOAT, null)
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
@@ -344,6 +349,17 @@ export default function (gl) {
             gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempTex.tex, 0)
             gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
+            gl.bindTexture(gl.TEXTURE_2D, tempTex2.tex)
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.FLOAT, null)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+            gl.bindTexture(gl.TEXTURE_2D, null)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex2.fbo)
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempTex2.tex, 0)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
             var setupA = (function() {
                 var prog = gl.createProgram()
                 
@@ -353,7 +369,7 @@ export default function (gl) {
 
                 var u_count = gl.getUniformLocation(prog, "u_count")
                 var u_types = gl.getUniformLocation(prog, "u_types")
-                var u_texLength = gl.getUniformLocation(prog, "u_textureLength")
+                var u_texLength = gl.getUniformLocation(prog, "u_texLength")
                 var u_scale = gl.getUniformLocation(prog, "u_scale")
                 var v_id = gl.getAttribLocation(prog, "v_id")
 
@@ -373,7 +389,7 @@ export default function (gl) {
                     gl.uniform1i(u_types, 0)
                     gl.uniform1i(u_texLength, grid.textureLength)
                     gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
-                    gl.uniform1f(u_scale, t / grid.cellSize*grid.cellSize)
+                    gl.uniform1f(u_scale, t / (1*grid.cellSize*grid.cellSize))
 
                     gl.bindFramebuffer(gl.FRAMEBUFFER, grid.P.fbo)
                     gl.clearColor(0,0,0,0)
@@ -503,6 +519,7 @@ export default function (gl) {
                 var u_texLength = gl.getUniformLocation(prog, "u_texLength")
                 var u_count = gl.getUniformLocation(prog, "u_count")
                 var u_A = gl.getUniformLocation(prog, "u_A")
+                var u_types = gl.getUniformLocation(prog, "u_types")
                 var u_pre = gl.getUniformLocation(prog, "u_pre")
                 var u_pcg = gl.getUniformLocation(prog, "u_pcg")
                 var u_setS = gl.getUniformLocation(prog, "u_setS")
@@ -518,6 +535,9 @@ export default function (gl) {
                     gl.activeTexture(gl.TEXTURE1)
                     gl.bindTexture(gl.TEXTURE_2D, grid.MIC1.tex)
                     gl.uniform1i(u_pre, 1)
+                    gl.activeTexture(gl.TEXTURE3)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
+                    gl.uniform1i(u_types, 3)
                     gl.uniform1i(u_setS, setS)
 
                     gl.uniform1i(u_texLength, grid.textureLength)
@@ -534,6 +554,8 @@ export default function (gl) {
                     var N = Math.max(Math.max(grid.count[0], grid.count[1]), grid.count[2]);
                     gl.activeTexture(gl.TEXTURE2)
                     gl.uniform1i(u_pcg, 2)
+
+                    gl.disable(gl.DEPTH_TEST)
 
                     gl.uniform1i(u_step, 0)
                     for (var i = 0; i < N; ++i) {
@@ -584,7 +606,7 @@ export default function (gl) {
                 gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
                 gl.bindBuffer(gl.ARRAY_BUFFER, null)
 
-                return function() {
+                return function(useNew) {
                     gl.useProgram(prog)
 
                     gl.activeTexture(gl.TEXTURE0)
@@ -595,8 +617,14 @@ export default function (gl) {
 
                     gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
                     gl.enable(gl.SCISSOR_TEST)
-                    gl.viewport(0,0,1,1)
-                    gl.scissor(0,0,1,1)
+                    if (useNew) {
+                        gl.viewport(0,1,1,1)
+                        gl.scissor(0,1,1,1)
+                    } else {
+                        gl.viewport(0,0,1,1)
+                        gl.scissor(0,0,1,1)
+                    }
+                    
                     gl.clearColor(0,0,0,0)
                     gl.clear(gl.COLOR_BUFFER_BIT)
                     
@@ -620,9 +648,234 @@ export default function (gl) {
             })()
 
             var setZ = (function() {
-                
-                return function() {
+                var prog = gl.createProgram()
 
+                var vs = getShader(require('./shaders/pressure-applyA-vert.glsl'), gl.VERTEX_SHADER);
+                var fs = getShader(require('./shaders/set-frag.glsl'), gl.FRAGMENT_SHADER);
+                addShaders(prog, [vs, fs]);
+
+                var u_A = gl.getUniformLocation(prog, "u_A")
+                var u_pcg = gl.getUniformLocation(prog, "u_pcg")
+                var u_count = gl.getUniformLocation(prog, "u_count")
+                var u_texLength = gl.getUniformLocation(prog, "u_texLength")
+
+                var v_id = gl.getAttribLocation(prog, "v_id")
+
+                var pointCount = 4*grid.count[0]*grid.count[1]*grid.count[2]
+                var pointBuffer = gl.createBuffer()
+                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer)
+                var data = new Float32Array(pointCount)
+                for (var i = 0; i < pointCount; ++i) { data[i] = i }
+                gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
+                gl.bindBuffer(gl.ARRAY_BUFFER, null)
+
+                return function() {
+                    gl.useProgram(prog)
+
+                    var temp = grid.PCG1
+                    grid.PCG1 = grid.PCG2
+                    grid.PCG2 = temp
+
+                    gl.activeTexture(gl.TEXTURE0)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.P.tex)
+                    gl.uniform1i(u_A, 0);
+                    gl.activeTexture(gl.TEXTURE1)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.PCG2.tex)
+                    gl.uniform1i(u_pcg, 1);
+
+                    gl.uniform1i(u_texLength, grid.textureLength)
+                    gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
+
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
+                    gl.viewport(0, 0, grid.textureLength, grid.textureLength)
+
+                    gl.clearColor(0,0,0,0)
+                    gl.clear(gl.COLOR_BUFFER_BIT)
+
+                    gl.enable(gl.BLEND)
+                    gl.blendFunc(gl.ONE, gl.ONE)
+                    gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer)
+                    gl.enableVertexAttribArray(v_id)
+                    gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0)
+                    gl.drawArrays(gl.POINTS, 0, pointCount)
+                    gl.disableVertexAttribArray(v_id)
+                    gl.bindBuffer(gl.ARRAY_BUFFER, null)
+                    gl.disable(gl.BLEND)
+
+                }
+            })()
+
+            var computeAlpha = (function() {
+                var prog = gl.createProgram()
+                
+                var vs = getShader(require('./shaders/pressure-alpha-vert.glsl'), gl.VERTEX_SHADER);
+                var fs = getShader(require('./shaders/set-frag.glsl'), gl.FRAGMENT_SHADER);
+                addShaders(prog, [vs, fs]);
+
+                var u_count = gl.getUniformLocation(prog, "u_count")
+                var u_texLength = gl.getUniformLocation(prog, "u_texLength")
+                var u_pcg = gl.getUniformLocation(prog, "u_pcg")
+
+                var v_id = gl.getAttribLocation(prog, "v_id")
+
+                var pointCount = grid.count[0]*grid.count[1]*grid.count[2]
+                var pointBuffer = gl.createBuffer()
+                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer)
+                var data = new Float32Array(pointCount)
+                for (var i = 0; i < pointCount; ++i) { data[i] = i }
+                gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
+                gl.bindBuffer(gl.ARRAY_BUFFER, null)
+
+                return function() {
+                    gl.useProgram(prog)
+
+                    gl.activeTexture(gl.TEXTURE0)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex)
+                    gl.uniform1i(u_pcg, 0);
+                    gl.uniform1i(u_texLength, grid.textureLength)
+                    gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
+
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
+                    gl.enable(gl.SCISSOR_TEST)
+                    gl.viewport(1,0,1,1)
+                    gl.scissor(1,0,1,1)
+                    gl.clearColor(0,0,0,0)
+                    gl.clear(gl.COLOR_BUFFER_BIT)
+                    
+
+                    gl.enable(gl.BLEND)
+                    gl.blendFunc(gl.ONE, gl.ONE)
+                    gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer)
+                    gl.enableVertexAttribArray(v_id)
+                    gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0)
+                    gl.drawArrays(gl.POINTS, 0, pointCount)
+                    gl.disableVertexAttribArray(v_id)
+                    gl.bindBuffer(gl.ARRAY_BUFFER, null)
+                    gl.disable(gl.BLEND)
+
+                    gl.disable(gl.SCISSOR_TEST)
+
+                    // var buf = new Float32Array(4)
+                    // gl.readPixels(0,0,1,1, gl.RGBA, gl.FLOAT, buf)
+                    // console.log('sigma:', buf[0])
+                    // gl.readPixels(1,0,1,1, gl.RGBA, gl.FLOAT, buf)
+                    // console.log('alphap:', buf[0])
+                }
+            })()
+
+            var updateGuess = (function() {
+                var prog = gl.createProgram();
+                var vs = getShader(require('./shaders/quad-vert.glsl'), gl.VERTEX_SHADER);
+                var fs = getShader(require('./shaders/pressure-updateGuess-frag.glsl'), gl.FRAGMENT_SHADER);
+                addShaders(prog, [vs, fs])
+
+                var v_pos = gl.getAttribLocation(prog, "v_pos")
+                var u_texLength = gl.getUniformLocation(prog, "u_texLength")
+                var u_count = gl.getUniformLocation(prog, "u_count")
+
+                var u_pcg = gl.getUniformLocation(prog, "u_pcg")
+                var u_const = gl.getUniformLocation(prog, "u_const")
+
+                return function() {
+                    gl.useProgram(prog)
+
+                    var temp = grid.PCG1
+                    grid.PCG1 = grid.PCG2
+                    grid.PCG2 = temp
+
+                    gl.activeTexture(gl.TEXTURE0)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.PCG2.tex)
+                    gl.uniform1i(u_pcg, 0)
+
+                    gl.activeTexture(gl.TEXTURE1)
+                    gl.bindTexture(gl.TEXTURE_2D, tempTex.tex)
+                    gl.uniform1i(u_const, 1)
+
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo)
+                
+                    gl.enableVertexAttribArray(v_pos)
+                    gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0)
+
+                    gl.viewport(0,0,grid.textureLength,grid.textureLength)
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+                    gl.disableVertexAttribArray(v_pos)
+                        
+                }
+            })()
+
+            var updateSearch = (function() {
+                var prog = gl.createProgram();
+                var vs = getShader(require('./shaders/quad-vert.glsl'), gl.VERTEX_SHADER);
+                var fs = getShader(require('./shaders/pressure-updateSearch-frag.glsl'), gl.FRAGMENT_SHADER);
+                addShaders(prog, [vs, fs])
+
+                var v_pos = gl.getAttribLocation(prog, "v_pos")
+                var u_texLength = gl.getUniformLocation(prog, "u_texLength")
+                var u_count = gl.getUniformLocation(prog, "u_count")
+
+                var u_pcg = gl.getUniformLocation(prog, "u_pcg")
+                var u_const = gl.getUniformLocation(prog, "u_const")
+
+                return function() {
+                    gl.useProgram(prog)
+
+                    var temp = grid.PCG1
+                    grid.PCG1 = grid.PCG2
+                    grid.PCG2 = temp
+
+                    gl.activeTexture(gl.TEXTURE0)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.PCG2.tex)
+                    gl.uniform1i(u_pcg, 0)
+
+                    gl.activeTexture(gl.TEXTURE1)
+                    gl.bindTexture(gl.TEXTURE_2D, tempTex.tex)
+                    gl.uniform1i(u_const, 1)
+
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo)
+                
+                    gl.enableVertexAttribArray(v_pos)
+                    gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0)
+
+                    gl.viewport(0,0,grid.textureLength,grid.textureLength)
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+                    gl.disableVertexAttribArray(v_pos)
+                }
+            })()
+
+            var swapSigma = (function() {
+                var prog = gl.createProgram();
+                var vs = getShader(require('./shaders/quad-vert.glsl'), gl.VERTEX_SHADER);
+                var fs = getShader(require('./shaders/pressure-swapSigma-frag.glsl'), gl.FRAGMENT_SHADER);
+                addShaders(prog, [vs, fs])
+
+                var v_pos = gl.getAttribLocation(prog, "v_pos")
+                var u_const = gl.getUniformLocation(prog, "u_const")
+
+                return function() {
+                    gl.useProgram(prog)
+
+                    gl.activeTexture(gl.TEXTURE0)
+                    gl.bindTexture(gl.TEXTURE_2D, tempTex.tex)
+                    gl.uniform1i(u_const, 0)
+
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex2.fbo)
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo)
+                    gl.enableVertexAttribArray(v_pos)
+                    gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0)
+                    gl.viewport(0,0,2,2)
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+                    gl.disableVertexAttribArray(v_pos)
+                    
+                    var temp = tempTex;
+                    tempTex = tempTex2;
+                    tempTex2 = temp;
                 }
             })()
 
@@ -631,9 +884,42 @@ export default function (gl) {
                 setupb()
                 precondition()
                 preconditionZ(true)
-                computeSigma()
+                computeSigma(false)
+                
+                var buf = new Float32Array(4)
 
-                setZ()
+                // setZ()
+                // computeAlpha()
+
+                // gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
+                // gl.readPixels(1,0,1,1, gl.RGBA, gl.FLOAT, buf)
+                // console.log('s dot z:', buf[0])
+                
+                for (var i = 0; i < 50; ++i) {
+                    computeSigma(false)
+                    setZ()
+                    computeAlpha()
+                    updateGuess()
+                    preconditionZ(false)
+                    computeSigma(true)
+                    updateSearch()
+
+                    // gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
+                    // gl.readPixels(0,0,1,1, gl.RGBA, gl.FLOAT, buf)
+                    // console.log('1. sigma:', buf[0])
+
+                    // swapSigma()
+
+                    // gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
+                    // gl.readPixels(0,0,1,1, gl.RGBA, gl.FLOAT, buf)
+                    // console.log('z dot r', buf[0])
+                    // gl.readPixels(1,0,1,1, gl.RGBA, gl.FLOAT, buf)
+                    // console.log('z dot s:', buf[0])
+                    // gl.readPixels(0,1,1,1, gl.RGBA, gl.FLOAT, buf)
+                    // console.log('z dot r (new)', buf[0])
+
+                    
+                }
             }
         })()
 

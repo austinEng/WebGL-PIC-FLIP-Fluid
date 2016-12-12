@@ -20,8 +20,8 @@ void main() {
   keep = 1.0;
   // val = vec4(vec3(texVal[1]), 1);
   // val = vec4(2);
-  texVal[0] = texVal[1] * texVal[2];
+  texVal[0] = texVal[2] * texVal[3];
   val = texVal;
-
+  val = vec4(texVal[2]);
   gl_Position = vec4(0,0,0,1);
 }

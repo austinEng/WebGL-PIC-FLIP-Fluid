@@ -13,6 +13,10 @@ varying vec2 f_uv;
 @import ./include/grid;
 
 #define GET(grid, uv, c) (uv.x < 0.0 ? 0.0 : texture2D(grid, uv)[c])
+#define Aplusi(grid, uv) GET(grid, uv, 0)
+#define Aplusj(grid, uv) GET(grid, uv, 1)
+#define Aplusk(grid, uv) GET(grid, uv, 2)
+#define Adiag(grid, uv) GET(grid, uv, 3)
 
 void main() {
     if (texture2D(u_types, f_uv)[0] != 1.0) discard;
@@ -26,23 +30,23 @@ void main() {
     if (!checkIdx(idx - ivec3(0,1,0), u_count)) mJ[0] = -1.0;
     if (!checkIdx(idx - ivec3(0,0,1), u_count)) mK[0] = -1.0; 
 
-    float diag = GET(u_A, f_uv, 3);
+    float diag = Adiag(u_A, f_uv);
     float e = diag
-                  - pow(GET(u_A, mI, 0) * GET(u_Pre, mI, 0), 2.0)
-                  - pow(GET(u_A, mJ, 0) * GET(u_Pre, mJ, 0), 2.0)
-                  - pow(GET(u_A, mK, 0) * GET(u_Pre, mK, 0), 2.0)
+                  - pow(Aplusi(u_A, mI) * GET(u_Pre, mI, 0), 2.0)
+                  - pow(Aplusj(u_A, mJ) * GET(u_Pre, mJ, 0), 2.0)
+                  - pow(Aplusk(u_A, mK) * GET(u_Pre, mK, 0), 2.0)
 
                   - 0.97 * (
-                    GET(u_A, mI, 0) * (
-                      GET(u_A, mI, 1) + GET(u_A, mI, 2)
+                    Aplusi(u_A, mI) * (
+                      Aplusj(u_A, mI) + Aplusk(u_A, mI)
                     ) * pow(GET(u_Pre, mI, 0), 2.0) +
 
-                    GET(u_A, mJ, 1) * (
-                      GET(u_A, mJ, 0) + GET(u_A, mJ, 2)
+                    Aplusj(u_A, mJ) * (
+                      Aplusi(u_A, mJ) + Aplusk(u_A, mJ)
                     ) * pow(GET(u_Pre, mJ, 0), 2.0) +
 
-                    GET(u_A, mK, 2) * (
-                      GET(u_A, mK, 0) + GET(u_A, mK, 1)
+                    Aplusk(u_A, mK) * (
+                      Aplusi(u_A, mK) + Aplusj(u_A, mK)
                     ) * pow(GET(u_Pre, mK, 0), 2.0)
                   );
   if (e < 0.25 * diag) {

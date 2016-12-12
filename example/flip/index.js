@@ -164,7 +164,7 @@ var simulationControls = {
     sim.step(10/60)
     drawloop.start()
   },
-  density: 1000  // particles per cubic meter
+  density: 100  // particles per cubic meter
 }
 
 initialize(simulationControls.density)
@@ -187,8 +187,11 @@ display.add(gridPainter, 'drawY').onChange(drawloop.start)
 display.add(gridPainter, 'drawZ').onChange(drawloop.start)
 display.add(gridPainter, 'drawTypes').onChange(drawloop.start)
 display.add(gridPainter, 'drawA').onChange(drawloop.start)
+display.add(gridPainter, 'drawp').onChange(drawloop.start)
+display.add(gridPainter, 'drawr').onChange(drawloop.start)
 display.add(gridPainter, 'drawb').onChange(drawloop.start)
 display.add(gridPainter, 'drawz').onChange(drawloop.start)
+display.add(gridPainter, 'draws').onChange(drawloop.start)
 display.add(gridPainter, 'drawMIC').onChange(drawloop.start)
 display.open()
 
