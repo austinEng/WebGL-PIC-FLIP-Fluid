@@ -8,6 +8,7 @@ uniform sampler2D u_A;
 uniform sampler2D u_pre;
 uniform sampler2D u_types;
 uniform sampler2D u_pcg;
+uniform sampler2D u_q;
 uniform int u_texLength;
 
 uniform int u_step;
@@ -27,7 +28,7 @@ varying vec4 val;
 
 void main() {
   ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
-
+  if (!checkIdx(idx, u_count - 1)) discard;
   if (texture2D(u_types, f_uv)[0] != 1.0) discard;
 
   vec2 mI = XYZtoUV(idx - ivec3(1,0,0), u_texLength, u_count);
@@ -37,34 +38,33 @@ void main() {
   vec2 pJ = XYZtoUV(idx + ivec3(0,1,0), u_texLength, u_count);
   vec2 pK = XYZtoUV(idx + ivec3(0,0,1), u_texLength, u_count);
 
-  if (!checkIdx(idx - ivec3(1,0,0), u_count)) mI[0] = -1.0;
-  if (!checkIdx(idx - ivec3(0,1,0), u_count)) mJ[0] = -1.0;
-  if (!checkIdx(idx - ivec3(0,0,1), u_count)) mK[0] = -1.0; 
-  if (!checkIdx(idx + ivec3(1,0,0), u_count)) pI[0] = -1.0;
-  if (!checkIdx(idx + ivec3(0,1,0), u_count)) pJ[0] = -1.0;
-  if (!checkIdx(idx + ivec3(0,0,1), u_count)) pK[0] = -1.0; 
+  if (!checkIdx(idx - ivec3(1,0,0), u_count-1)) mI[0] = -1.0;
+  if (!checkIdx(idx - ivec3(0,1,0), u_count-1)) mJ[0] = -1.0;
+  if (!checkIdx(idx - ivec3(0,0,1), u_count-1)) mK[0] = -1.0; 
+  if (!checkIdx(idx + ivec3(1,0,0), u_count-1)) pI[0] = -1.0;
+  if (!checkIdx(idx + ivec3(0,1,0), u_count-1)) pJ[0] = -1.0;
+  if (!checkIdx(idx + ivec3(0,0,1), u_count-1)) pK[0] = -1.0; 
 
-  int greatestIdx = int(max(max(float(idx.x), float(idx.y)), float(idx.z)));
-  int smallestIdx = int(min(min(float(idx.x), float(idx.y)), float(idx.z)));
+  // int greatestIdx = int(max(max(float(idx.x), float(idx.y)), float(idx.z)));
+  // int smallestIdx = int(min(min(float(idx.x), float(idx.y)), float(idx.z)));
 
-  vec4 curr = texture2D(u_pcg, f_uv);
+  vec4 curr;
   if (u_step == 0) {
-
-    
+    curr = texture2D(u_q, f_uv);
     // if (u_iter == greatestIdx) {
-    if (u_iter >= idx.x && u_iter >= idx.y && u_iter >= idx.z) {
+    if (idx.x <= u_iter && idx.y <= u_iter && idx.z <= u_iter) {
       float t = texture2D(u_pcg, f_uv)[1]
-        - Aplusi(u_A, mI) * precon(u_pre, mI) * GET(u_pcg, mI, 2)
-        - Aplusj(u_A, mJ) * precon(u_pre, mJ) * GET(u_pcg, mJ, 2)
-        - Aplusk(u_A, mK) * precon(u_pre, mK) * GET(u_pcg, mK, 2);
-      curr[2] = t * precon(u_pre, f_uv);
+        - Aplusi(u_A, mI) * precon(u_pre, mI) * GET(u_q, mI, 0)
+        - Aplusj(u_A, mJ) * precon(u_pre, mJ) * GET(u_q, mJ, 0)
+        - Aplusk(u_A, mK) * precon(u_pre, mK) * GET(u_q, mK, 0);
+      curr[0] = t * precon(u_pre, f_uv);
     }
 
   } else if (u_step == 1) {
-
+    curr = texture2D(u_pcg, f_uv);
     // if (u_iter == smallestIdx) {
-    if (u_iter <= idx.x && u_iter <= idx.y && u_iter <= idx.z) {
-      float t = texture2D(u_pcg, f_uv)[2]
+    if (idx.x >= u_iter && idx.y >= u_iter && idx.z >= u_iter) {
+      float t = texture2D(u_q, f_uv)[0]
         - Aplusi(u_A, f_uv) * precon(u_pre, f_uv) * GET(u_pcg, pI, 2)
         - Aplusj(u_A, f_uv) * precon(u_pre, f_uv) * GET(u_pcg, pJ, 2)
         - Aplusk(u_A, f_uv) * precon(u_pre, f_uv) * GET(u_pcg, pK, 2);

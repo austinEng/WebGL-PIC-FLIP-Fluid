@@ -24,6 +24,8 @@ void main() {
     discard;
   }
 
+  if (!checkIdx(idx, u_count - 1)) discard;
+
   // if (idx.x >= u_count.x - 1 || 
   //     idx.y >= u_count.y - 1 || 
   //     idx.z >= u_count.z - 1) {

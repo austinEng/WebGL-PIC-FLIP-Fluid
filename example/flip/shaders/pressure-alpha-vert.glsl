@@ -3,6 +3,7 @@ attribute float v_id;
 uniform ivec3 u_count;
 uniform int u_texLength;
 uniform sampler2D u_pcg;
+uniform float u_scale;
 varying vec4 val;
 varying float keep;
 
@@ -22,6 +23,8 @@ void main() {
   // val = vec4(2);
   texVal[0] = texVal[2] * texVal[3];
   val = texVal;
-  val = vec4(texVal[2]);
+
+  if (!checkIdx(idx, u_count-1)) val = vec4(0);
+
   gl_Position = vec4(0,0,0,1);
 }

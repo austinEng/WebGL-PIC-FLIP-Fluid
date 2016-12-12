@@ -13,6 +13,8 @@ varying vec2 f_uv;
 
 @import ./include/grid;
 
+#define CHECK_FLUID(offset) (checkIdx(idx + offset, u_count - 1) && texture2D(u_types, XYZtoUV(idx + offset, u_texLength, u_count))[0] == 1.0)
+
 void main() {
   ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
 
@@ -23,12 +25,12 @@ void main() {
     return;
   }
 
-  bool leftFluid = texture2D(u_types, XYZtoUV(idx - ivec3(1,0,0), u_texLength, u_count))[0] == 1.0;
-  bool rightFluid = texture2D(u_types, XYZtoUV(idx + ivec3(1,0,0), u_texLength, u_count))[0] == 1.0;
-  bool downFluid = texture2D(u_types, XYZtoUV(idx - ivec3(0,1,0), u_texLength, u_count))[0] == 1.0;
-  bool upFluid = texture2D(u_types, XYZtoUV(idx + ivec3(0,1,0), u_texLength, u_count))[0] == 1.0;
-  bool backFluid = texture2D(u_types, XYZtoUV(idx - ivec3(0,0,1), u_texLength, u_count))[0] == 1.0;
-  bool frontFluid = texture2D(u_types, XYZtoUV(idx + ivec3(0,0,1), u_texLength, u_count))[0] == 1.0;
+  bool leftFluid = CHECK_FLUID(ivec3(-1,0,0)); //texture2D(u_types, XYZtoUV(idx - ivec3(1,0,0), u_texLength, u_count))[0] == 1.0;
+  bool rightFluid = CHECK_FLUID(ivec3(1,0,0)); //texture2D(u_types, XYZtoUV(idx + ivec3(1,0,0), u_texLength, u_count))[0] == 1.0;
+  bool downFluid = CHECK_FLUID(ivec3(0,-1,0)); //texture2D(u_types, XYZtoUV(idx - ivec3(0,1,0), u_texLength, u_count))[0] == 1.0;
+  bool upFluid = CHECK_FLUID(ivec3(0,1,0)); //texture2D(u_types, XYZtoUV(idx + ivec3(0,1,0), u_texLength, u_count))[0] == 1.0;
+  bool backFluid = CHECK_FLUID(ivec3(0,0,-1)); //texture2D(u_types, XYZtoUV(idx - ivec3(0,0,1), u_texLength, u_count))[0] == 1.0;
+  bool frontFluid = CHECK_FLUID(ivec3(0,0,1)); //texture2D(u_types, XYZtoUV(idx + ivec3(0,0,1), u_texLength, u_count))[0] == 1.0;
 
   if (leftFluid || rightFluid) {
     current[0] -= u_scale * (

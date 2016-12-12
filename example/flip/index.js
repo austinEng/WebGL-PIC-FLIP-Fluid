@@ -85,7 +85,7 @@ function initialize(density) {
   var CELL_SIZE = 2 / Math.cbrt(density) // ~8 particles per cell
   var box = new BoxRegion(density, new Bound({
     minX: -0.3, maxX: 0.3,
-    minY: 0.3, maxY: 0.5,
+    minY: -0.3, maxY: 0.5,
     minZ: -0.3, maxZ: 0.3
   }))
   var particles = new ParticleBuffer()
@@ -94,7 +94,7 @@ function initialize(density) {
 
   var grid = new MACGrid(new Bound({
     minX: -0.5, maxX: 0.5,
-    minY: -0.5, maxY: 0.6,
+    minY: -0.5, maxY: 0.5,
     minZ: -0.5, maxZ: 0.5
   }), CELL_SIZE)
 
@@ -164,7 +164,7 @@ var simulationControls = {
     sim.step(10/60)
     drawloop.start()
   },
-  density: 100  // particles per cubic meter
+  density: 1000  // particles per cubic meter
 }
 
 initialize(simulationControls.density)

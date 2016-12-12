@@ -22,13 +22,14 @@ void main() {
     if (texture2D(u_types, f_uv)[0] != 1.0) discard;
     ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
     if (idx.x > u_iter || idx.y > u_iter || idx.z > u_iter) discard;
+    if (!checkIdx(idx, u_count - 1)) discard;
 
     vec2 mI = XYZtoUV(idx - ivec3(1,0,0), u_texLength, u_count);
     vec2 mJ = XYZtoUV(idx - ivec3(0,1,0), u_texLength, u_count);
     vec2 mK = XYZtoUV(idx - ivec3(0,0,1), u_texLength, u_count);
-    if (!checkIdx(idx - ivec3(1,0,0), u_count)) mI[0] = -1.0;
-    if (!checkIdx(idx - ivec3(0,1,0), u_count)) mJ[0] = -1.0;
-    if (!checkIdx(idx - ivec3(0,0,1), u_count)) mK[0] = -1.0; 
+    if (!checkIdx(idx - ivec3(1,0,0), u_count-1)) mI[0] = -1.0;
+    if (!checkIdx(idx - ivec3(0,1,0), u_count-1)) mJ[0] = -1.0;
+    if (!checkIdx(idx - ivec3(0,0,1), u_count-1)) mK[0] = -1.0; 
 
     float diag = Adiag(u_A, f_uv);
     float e = diag

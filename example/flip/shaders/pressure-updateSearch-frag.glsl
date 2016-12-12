@@ -13,13 +13,15 @@ varying vec2 f_uv;
 void main() {
   vec4 curr = texture2D(u_pcg, f_uv);
 
-  float beta = texture2D(u_const, vec2(0,1))[0] / texture2D(u_const, vec2(0,0))[0];
-
-  if (texture2D(u_const, vec2(0,0))[0] == 0.0) {
-    beta == 0.0;
-  }
+  float sigmanew = texture2D(u_const, vec2(0,1))[0];
+  float sigma = texture2D(u_const, vec2(0,0))[0];
+  float beta = sigmanew / sigma;
 
   curr[3] = curr[2] + beta*curr[3];
+
+  // if (abs(sigma) == 0.00001 || abs(sigmanew) == 0.00001) {
+  //   curr[3] = 0.0;
+  // }
 
   gl_FragColor = curr;
 }

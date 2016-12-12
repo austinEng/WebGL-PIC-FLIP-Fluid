@@ -41,7 +41,7 @@ void main() {
   val = texture2D(u_pcg, XYZtoUV(tgtIdx, u_texLength, u_count)) / 4.0;
   val[2] = v;
 
-  if(!checkIdx(tgtIdx, u_count)) {
+  if(!checkIdx(tgtIdx, u_count - 1) || !checkIdx(idx, u_count - 1)) {
     val = vec4(0,0,0,0);
   }
 

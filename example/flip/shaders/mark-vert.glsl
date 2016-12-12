@@ -13,8 +13,10 @@ varying float type;
 @import ./include/grid;
 
 void main() {
-    int pIdx = int(v_id) * 2;
-    int vIdx = int(v_id) * 2 + 1;
+    int pIdx = (int(v_id) / 7) * 2;
+    int vIdx = (int(v_id) / 7) * 2 + 1;
+
+    int type = int(v_id) - (int(v_id) / 7) * 7;
 
     int pV = pIdx / u_particleTexLength;
     int pU = pIdx - pV * u_particleTexLength;
@@ -26,10 +28,33 @@ void main() {
     vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);
 
     vec3 v_pos = texture2D(u_particles, pUV).rgb;
-    vec3 v_vel = texture2D(u_particles, vUV).rgb;
+    // vec3 v_vel = texture2D(u_particles, vUV).rgb;
 
     ivec3 idx = indexOf(v_pos, u_min, u_cellSize);
     idx = ivec3(clamp(vec3(idx), vec3(0,0,0), vec3(u_count - 2)));
+
+    ivec3 oldIdx = idx;
+
+    if (type == 0) {
+
+    } else if (type == 1) {
+        idx += ivec3(1, 0, 0);
+    } else if (type == 2) {
+        idx -= ivec3(1, 0, 0);
+    } else if (type == 3) {
+        idx += ivec3(0, 1, 0);
+    } else if (type == 4) {
+        idx -= ivec3(0, 1, 0);
+    } else if (type == 5) {
+        idx += ivec3(0, 0, 1);
+    } else if (type == 6) {
+        idx -= ivec3(0, 0, 1);
+    }
+
+    if (!checkIdx(idx, u_count)) {
+        idx = oldIdx;
+    }
+
     int flatIdx = toFlat(idx, u_count);
     int t = flatIdx / u_texLength;
     int s = flatIdx - t * u_texLength;

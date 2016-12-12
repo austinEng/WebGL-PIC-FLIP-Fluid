@@ -26,7 +26,7 @@ function Painters(gl) {
         var readBuffer
         var painter = {
           drawParticles: true,
-          drawParticleValues: true,
+          drawParticleValues: false,
           setBuffer: function(_particles) {
             particles = _particles
             readBuffer = new Float32Array(4*particles.textureLength*particles.textureLength)
