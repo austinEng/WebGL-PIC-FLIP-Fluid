@@ -17,7 +17,7 @@ export default function (gl) {
         return buffer
     })()
 
-    function Sim (grid, particles) {
+    function Sim (grid, particles, solverSteps) {
 
         var clearGridVelocity = (function() {
             var prog = gl.createProgram()
@@ -969,7 +969,7 @@ export default function (gl) {
                 // gl.readPixels(1,0,1,1, gl.RGBA, gl.FLOAT, buf)
                 // console.log('s dot z:', buf[0])
                 //return
-                for (var i = 0; i < 30; ++i) {
+                for (var i = 0; i < solverSteps; ++i) {
                     computeSigma(false)
                     setZ()
                     computeAlpha()

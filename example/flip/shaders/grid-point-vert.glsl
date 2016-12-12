@@ -47,4 +47,9 @@ void main() {
   gl_Position = p;
 
   gl_PointSize = 10.0;
+
+  if (!checkIdx(idx, u_count - 1)) {
+    gl_PointSize = 0.0;
+    gl_Position = vec4(100,100,0.0,1.0);
+  }
 }

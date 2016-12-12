@@ -17,6 +17,8 @@ void main() {
   float zdots = texture2D(u_const, vec2(1,0))[0];
   float alpha = sigma / zdots;
 
+  if (((zdots <= 0.0 || 0.0 <= zdots) ? false : true)) alpha = 0.0;
+
   // if (texture2D(u_const, vec2(1,0))[0] == 0.0) {
   //   alpha = 0.0;
   // }

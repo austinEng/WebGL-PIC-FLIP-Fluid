@@ -215,11 +215,15 @@ function Painters(gl) {
           gl.readPixels(0, 0, grid.textureLength, grid.textureLength, gl.RGBA, gl.FLOAT, readBuffer)
 
           for (let idx = 0; idx < readBuffer.length / 4; ++idx) {
-            if (idx >= grid.count[0] * grid.count[1] * grid.count[2]) break;
+            if (idx >= grid.count[0] * grid.count[1] * grid.count[2]) continue;
 
             let z = Math.floor(idx / (grid.count[0] * grid.count[1]));
             let y = Math.floor((idx - z * (grid.count[0] * grid.count[1])) / grid.count[0]);
             let x = idx - y * grid.count[0] - z * (grid.count[0] * grid.count[1]);
+
+            if (x >= grid.count[0] - 1) continue;
+            if (y >= grid.count[1] - 1) continue;
+            if (z >= grid.count[2] - 1) continue;
 
             let pos = new THREE.Vector3(
               (offset[0] + x)*grid.cellSize + grid.min[0],
@@ -232,9 +236,6 @@ function Painters(gl) {
 
             let label = document.createElement('span')
 
-            for (let i = 0; i < indices.length; ++i) {
-
-            }
             let text = document.createTextNode(
               indices.map(function(num) {
                 return readBuffer[idx*4 + num]

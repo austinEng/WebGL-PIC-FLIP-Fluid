@@ -81,11 +81,11 @@ var gridPainter = GridPainter(null)
 renderer.add(gridPainter)
 renderer.add(particlePainter)
 
-function initialize(density) { 
-  var CELL_SIZE = 2 / Math.cbrt(density) // ~8 particles per cell
-  var box = new BoxRegion(density, new Bound({
+function initialize(settings) { 
+  var CELL_SIZE = 2 / Math.cbrt(settings.density) // ~8 particles per cell
+  var box = new BoxRegion(settings.density, new Bound({
     minX: -0.3, maxX: 0.3,
-    minY: -0.3, maxY: 0.5,
+    minY: -0.3, maxY: 0.4,
     minZ: -0.3, maxZ: 0.3
   }))
   var particles = new ParticleBuffer()
@@ -101,7 +101,7 @@ function initialize(density) {
   particlePainter.setBuffer(particles)
   gridPainter.setBuffer(grid)
 
-  sim = Sim(grid, particles)
+  sim = Sim(grid, particles, settings.solverSteps)
 }
 
 var drawloop = Loop(
@@ -156,7 +156,7 @@ var simulationControls = {
   },
   restart: function() {
     var running = sim.shouldUpdate
-    initialize(simulationControls.density)
+    initialize(simulationControls)
     sim.shouldUpdate = running
     drawloop.start()
   },
@@ -164,14 +164,16 @@ var simulationControls = {
     sim.step(10/60)
     drawloop.start()
   },
-  density: 1000  // particles per cubic meter
+  density: 1000,  // particles per cubic meter
+  solverSteps: 1
 }
 
-initialize(simulationControls.density)
+initialize(simulationControls)
 
 var gui = new DAT.GUI();
 var fluidSettings = gui.addFolder('Fluid')
 fluidSettings.add(simulationControls, 'density')
+fluidSettings.add(simulationControls, 'solverSteps', 1, 100)
 fluidSettings.open()
 var controls = gui.addFolder('Controls')
 controls.add(simulationControls, 'start')
