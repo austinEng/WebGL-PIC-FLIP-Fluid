@@ -57,9 +57,9 @@ vec3 positionOf(ivec3 idx, vec3 min, float cellSize) {
 vec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {
     
     vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;
-
-    vec3 l = floor(fIdx);
-    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));
+    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);
+    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));
+    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));
 
     vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);
     vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);
@@ -84,9 +84,9 @@ vec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 coun
 float gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {
     
     vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;
-
-    vec3 l = floor(fIdx);
-    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));
+    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);
+    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));
+    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));
 
     float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);
     float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);

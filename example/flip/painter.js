@@ -23,14 +23,22 @@ function Painters(gl) {
 
       ParticlePainter = function(_particles) {
         var particles = _particles
+        var readBuffer
         var painter = {
           drawParticles: true,
+          drawParticleValues: true,
           setBuffer: function(_particles) {
             particles = _particles
+            readBuffer = new Float32Array(4*particles.textureLength*particles.textureLength)
           }
-        } 
+        }
 
         function draw(state) {
+          let els = document.getElementsByClassName('particle-label')
+          while (els[0]) {
+            els[0].parentNode.removeChild(els[0])
+          }
+
           if (!painter.drawParticles) return
           gl.useProgram(prog)
           
@@ -47,6 +55,55 @@ function Painters(gl) {
           gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0)
           gl.drawArrays(gl.POINTS, 0, particles.length)
           gl.disableVertexAttribArray(v_id)
+
+          if (painter.drawParticleValues) {
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, particles.A.fbo)
+            gl.readPixels(0, 0, particles.textureLength, particles.textureLength, gl.RGBA, gl.FLOAT, readBuffer)
+            // console.log(readBuffer)
+            for (let idx = 0; idx < readBuffer.length / 8; ++idx) {
+              if (idx >= particles.length) break;
+              let px = readBuffer[idx*8 + 0];
+              let py = readBuffer[idx*8 + 1];
+              let pz = readBuffer[idx*8 + 2];
+              let vx = readBuffer[idx*8 + 4];
+              let vy = readBuffer[idx*8 + 5];
+              let vz = readBuffer[idx*8 + 6];
+              // console.log(px, py, pz, vx, vy, vz)
+
+              let pos = new THREE.Vector3(
+                px, py, pz
+              )
+              .project(state.camera)
+              .add(new THREE.Vector3(1, 1, 0))
+              .multiply(new THREE.Vector3(0.5*window.innerWidth, 0.5*window.innerHeight, 1))
+
+              let label = document.createElement('span')
+
+              let text = document.createTextNode(
+                [px, py, pz].map(num => Math.round(num*100000) / 100000).join(", ")
+              )
+              label.appendChild(text)
+              label.appendChild(document.createElement('br'))
+              text = document.createTextNode(
+                [vx, vy, vz].map(num => Math.round(num*100000) / 100000).join(", ")
+              )
+              label.appendChild(text)
+
+              label.style.position = 'absolute'
+              label.style.left = pos.x
+              label.style.top = window.innerHeight - pos.y
+              // label.style.backgroundColor = "#333"
+              label.style.color = "#ddd"
+              label.style.padding = "1px 3px"
+              label.style.fontSize = "10px"
+              label.style.userSelect = "none"
+              label.style.zIndex = `${Math.floor(1000 - 1000*pos.z)}`
+              label.className = 'particle-label'
+              document.body.appendChild(label)
+            }
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null)  
+          }
         }
 
         painter.draw = draw
@@ -158,6 +215,8 @@ function Painters(gl) {
           gl.readPixels(0, 0, grid.textureLength, grid.textureLength, gl.RGBA, gl.FLOAT, readBuffer)
 
           for (let idx = 0; idx < readBuffer.length / 4; ++idx) {
+            if (idx >= grid.count[0] * grid.count[1] * grid.count[2]) break;
+
             let z = Math.floor(idx / (grid.count[0] * grid.count[1]));
             let y = Math.floor((idx - z * (grid.count[0] * grid.count[1])) / grid.count[0]);
             let x = idx - y * grid.count[0] - z * (grid.count[0] * grid.count[1]);
