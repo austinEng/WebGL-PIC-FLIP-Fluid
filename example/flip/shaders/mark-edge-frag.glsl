@@ -13,7 +13,7 @@ varying vec2 f_uv;
 void main() {
     ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
 
-    if (any(equal(idx, ivec3(0,0,0))) || any(equal(idx, u_count - 1))) {
+    if (any(equal(idx, ivec3(0,0,0))) || any(equal(idx, u_count - 2))) {
       gl_FragColor = vec4(2.0, 2.0, 2.0, 2.0);
     } else {
       discard;

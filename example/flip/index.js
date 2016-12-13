@@ -18,9 +18,60 @@ const ext_tex_float = gl.getExtension("OES_texture_float")
 const {ParticlePainter, GridPainter} = Painters(gl)
 
 const ParticleBuffer = _ParticleBuffer(gl)
-const {ComputeBuffer, Computation} = _Compute(gl)
+const {ComputeBuffer, ComputeStorage, Computation} = _Compute(gl)
 const {MACGrid} = _MAC(gl)
 const {Sim} = _Sim(gl)
+
+var ParticleStorage = ComputeStorage({
+  format: [{
+    pos: 3,
+  }, {
+    vel: 3
+  }],
+  type: Float32Array,
+  dim: 3
+})
+
+var particleBufferA = ComputeBuffer({
+  storage: ParticleStorage,
+  dim: [10, 10, 10],
+  data: null
+})
+
+var particleBufferB = ComputeBuffer({
+  storage: ParticleStorage,
+  dim: [10, 10, 10],
+  data: null
+})
+
+particleBufferA.setData([{
+  pos: [1,5,6],
+  vel: [0,0,0]
+},
+{
+  pos: [2,1,3],
+  vel: [0,0,0]
+}])
+
+var gravityUpdate = Computation({
+  func: `particlesB[index].vel = particlesA[index].vel - 9.81*t`,
+  inputs: {
+    particlesA: ParticleStorage,
+    t: '1f'
+  },
+  outputs: {
+    particlesB: ParticleStorage
+  }
+})
+
+gravityUpdate.generate().setup({
+  inputs: {
+    particlesA: particleBufferA
+  },
+  outputs: {
+    particlesB: particleBufferB
+  }
+})
 
 
 var sim
@@ -30,12 +81,12 @@ var gridPainter = GridPainter(null)
 renderer.add(gridPainter)
 renderer.add(particlePainter)
 
-function initialize(density) { 
-  var CELL_SIZE = 2 / Math.cbrt(density) // ~8 particles per cell
-  var box = new BoxRegion(density, new Bound({
-    minX: -0.3, maxX: 0.3,
-    minY: 0.3, maxY: 0.5,
-    minZ: -0.3, maxZ: 0.3
+function initialize(settings) { 
+  var CELL_SIZE = 2 / Math.cbrt(settings.density) // ~8 particles per cell
+  var box = new BoxRegion(settings.density, new Bound({
+    minX: -0.2, maxX: 0.2,
+    minY: -0.3, maxY: 0.3,
+    minZ: -0.2, maxZ: 0.2
   }))
   var particles = new ParticleBuffer()
   particles.addRegion(box)
@@ -43,15 +94,17 @@ function initialize(density) {
 
   var grid = new MACGrid(new Bound({
     minX: -0.5, maxX: 0.5,
-    minY: -0.5, maxY: 0.6,
+    minY: -0.5, maxY: 0.5,
     minZ: -0.5, maxZ: 0.5
   }), CELL_SIZE)
 
   particlePainter.setBuffer(particles)
   gridPainter.setBuffer(grid)
 
-  sim = Sim(grid, particles)
+  sim = Sim(grid, particles, settings.solverSteps)
 }
+
+var STEP_SIZE = 1 / 60 / 2;
 
 var drawloop = Loop(
   () => {
@@ -60,7 +113,7 @@ var drawloop = Loop(
   },
   (t) => {
     if (sim.shouldUpdate) {
-      sim.step(10 / 60)
+      sim.step(STEP_SIZE, simulationControls.precondition)
     }
 
     gl.enable(gl.DEPTH_TEST)
@@ -83,6 +136,7 @@ drawloop.execStats.domElement.style.top = '48px';
 document.body.appendChild(drawloop.execStats.domElement)
 
 renderer.ready.then(() => {
+  // sim.shouldUpdate = true
   drawloop.start()
 
   renderer.camera.controls.addEventListener('change', e => {
@@ -104,32 +158,51 @@ var simulationControls = {
   },
   restart: function() {
     var running = sim.shouldUpdate
-    initialize(simulationControls.density)
+    initialize(simulationControls)
     sim.shouldUpdate = running
     drawloop.start()
   },
-  density: 100000  // particles per cubic meter
+  step: function() {
+    sim.step(STEP_SIZE, simulationControls.precondition)
+    drawloop.start()
+  },
+  precondition: false,
+  density: 100000,  // particles per cubic meter
+  solverSteps: 10
 }
 
-initialize(simulationControls.density)
+initialize(simulationControls)
 
 var gui = new DAT.GUI();
 var fluidSettings = gui.addFolder('Fluid')
-fluidSettings.add(simulationControls, 'density', 100, 2000000)
+fluidSettings.add(simulationControls, 'density')
+fluidSettings.add(simulationControls, 'solverSteps', 1, 100)
+fluidSettings.add(simulationControls, 'precondition')
 fluidSettings.open()
 var controls = gui.addFolder('Controls')
 controls.add(simulationControls, 'start')
 controls.add(simulationControls, 'stop')
 controls.add(simulationControls, 'restart')
+controls.add(simulationControls, 'step')
 controls.open()
 var display = gui.addFolder('Display')
 display.add(particlePainter, 'drawParticles').onChange(drawloop.start)
+display.add(particlePainter, 'drawParticleValues').onChange(drawloop.start)
+display.add(gridPainter, 'debugValues').onChange(drawloop.start)
 display.add(gridPainter, 'drawX').onChange(drawloop.start)
 display.add(gridPainter, 'drawY').onChange(drawloop.start)
 display.add(gridPainter, 'drawZ').onChange(drawloop.start)
 display.add(gridPainter, 'drawTypes').onChange(drawloop.start)
+display.add(gridPainter, 'drawA').onChange(drawloop.start)
+display.add(gridPainter, 'drawDiv').onChange(drawloop.start)
+display.add(gridPainter, 'drawp').onChange(drawloop.start)
+display.add(gridPainter, 'drawr').onChange(drawloop.start)
+display.add(gridPainter, 'drawz').onChange(drawloop.start)
+display.add(gridPainter, 'draws').onChange(drawloop.start)
+display.add(gridPainter, 'drawMIC').onChange(drawloop.start)
 display.open()
 
+/*
 import _CG from './cg'
 const CG = _CG(gl)
 
@@ -147,3 +220,4 @@ result = result
   .print(result.Minv)
   .print(result.x)
 console.log(result)
+*/

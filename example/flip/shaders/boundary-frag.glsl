@@ -21,36 +21,36 @@ void main() {
     
     ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
 
-    if (!checkIdx(idx, u_count)) {
-        discard;
-    }
+    // if (!checkIdx(idx, u_count - 1)) {
+    //     discard;
+    // }
 
-    // ivec3 left = idx - ivec3(1,0,0);
-    // ivec3 right = idx + ivec3(1,0,0);
-    // ivec3 up = idx + ivec3(0,1,0);
-    // ivec3 down = idx - ivec3(0,1,0);
-    // ivec3 front = idx + ivec3(0,0,1);
-    // ivec3 back = idx - ivec3(0,0,1);
+    ivec3 left = idx - ivec3(1,0,0);
+    ivec3 right = idx + ivec3(0,0,0);
+    ivec3 down = idx - ivec3(0,1,0);
+    ivec3 up = idx + ivec3(0,0,0);
+    ivec3 back = idx - ivec3(0,0,1);
+    ivec3 front = idx + ivec3(0,0,0);
 
     // set adjacent to solid to 0
-    // if (gridComponentAt(u_types, left, count, u_texLength, 0) == 2.0) {
-    //   current[0] = max(current[0], 0.0);
-    // }
-    // if (gridComponentAt(u_types, right, count, u_texLength, 0) == 2.0) {
-    //   current[0] = min(current[0], 0.0);
-    // }
-    // if (gridComponentAt(u_types, down, count, u_texLength, 0) == 2.0) {
-    //   current[1] = max(current[1], 0.0);
-    // }
-    // if (gridComponentAt(u_types, up, count, u_texLength, 0) == 2.0) {
-    //   current[1] = min(current[1], 0.0);
-    // }
-    // if (gridComponentAt(u_types, back, count, u_texLength, 0) == 2.0) {
-    //   current[2] = max(current[2], 0.0);
-    // }
-    // if (gridComponentAt(u_types, front, count, u_texLength, 0) == 2.0) {
-    //   current[2] = min(current[2], 0.0);
-    // }
+    if (checkIdx(left, u_count - 1) && gridComponentAt(u_types, left, u_count, u_texLength, 0) == 2.0) {
+      current[0] = max(current[0], 0.0);
+    }
+    if (checkIdx(right, u_count - 1) && gridComponentAt(u_types, right, u_count, u_texLength, 0) == 2.0) {
+      current[0] = min(current[0], 0.0);
+    }
+    if (checkIdx(down, u_count - 1) && gridComponentAt(u_types, down, u_count, u_texLength, 0) == 2.0) {
+      current[1] = max(current[1], 0.0);
+    }
+    if (checkIdx(up, u_count - 1) && gridComponentAt(u_types, up, u_count, u_texLength, 0) == 2.0) {
+      current[1] = min(current[1], 0.0);
+    }
+    if (checkIdx(back, u_count - 1) && gridComponentAt(u_types, back, u_count, u_texLength, 0) == 2.0) {
+      current[2] = max(current[2], 0.0);
+    }
+    if (checkIdx(front, u_count - 1) && gridComponentAt(u_types, front, u_count, u_texLength, 0) == 2.0) {
+      current[2] = min(current[2], 0.0);
+    }
 
     // clamp to bounds
     // current.xyz = mix(current.xyz, clamp(current.xyz, current.xyz, vec3(0,0,0)), vec3(equal(idx, count)));
