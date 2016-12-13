@@ -5,6 +5,7 @@ uniform sampler2D u_pcg;
 uniform sampler2D u_const;
 uniform int u_texLength;
 uniform ivec3 u_count;
+uniform float u_alpha;
 
 varying vec2 f_uv;
 
@@ -19,16 +20,11 @@ void main() {
 
   if (((zdots <= 0.0 || 0.0 <= zdots) ? false : true)) alpha = 0.0;
 
-  // if (texture2D(u_const, vec2(1,0))[0] == 0.0) {
-  //   alpha = 0.0;
-  // }
-
-  // if (abs(sigma) < 0.0001) {
-  //   alpha = 0.0;
-  // }
-
   curr[0] += alpha*curr[3];
   curr[1] -= alpha*curr[2];
+
+  // curr[0] += u_alpha*curr[3];
+  // curr[1] -= u_alpha*curr[2];
 
   gl_FragColor = curr;
 }

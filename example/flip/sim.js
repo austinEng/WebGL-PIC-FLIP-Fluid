@@ -369,6 +369,41 @@ export default function (gl) {
             gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempTex2.tex, 0)
             gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
+            var q1 = {
+                tex: gl.createTexture(),
+                fbo: gl.createFramebuffer()
+            }
+
+            var q2 = {
+                tex: gl.createTexture(),
+                fbo: gl.createFramebuffer()
+            }
+
+            gl.bindTexture(gl.TEXTURE_2D, q1.tex)
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+            gl.bindTexture(gl.TEXTURE_2D, null)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, q1.fbo)
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, q1.tex, 0)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+            gl.bindTexture(gl.TEXTURE_2D, q2.tex)
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+            gl.bindTexture(gl.TEXTURE_2D, null)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, q2.fbo)
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, q2.tex, 0)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+            var alpha;
+            var beta;
+
             var clearMatrices = (function() {
                 return function() {
                     gl.clearColor(0,0,0,0)
@@ -395,6 +430,12 @@ export default function (gl) {
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
                     gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex2.fbo)
+                    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, q1.fbo)
+                    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, q2.fbo)
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
                 }
             })()
@@ -569,39 +610,6 @@ export default function (gl) {
                 var u_setS = gl.getUniformLocation(prog, "u_setS")
                 var u_iter = gl.getUniformLocation(prog, "u_iter")
                 var u_step = gl.getUniformLocation(prog, "u_step")
-
-                var q1 = {
-                    tex: gl.createTexture(),
-                    fbo: gl.createFramebuffer()
-                }
-
-                var q2 = {
-                    tex: gl.createTexture(),
-                    fbo: gl.createFramebuffer()
-                }
-
-                gl.bindTexture(gl.TEXTURE_2D, q1.tex)
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null)
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-                gl.bindTexture(gl.TEXTURE_2D, null)
-                gl.bindFramebuffer(gl.FRAMEBUFFER, q1.fbo)
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, q1.tex, 0)
-                gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-
-                gl.bindTexture(gl.TEXTURE_2D, q2.tex)
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null)
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-                gl.bindTexture(gl.TEXTURE_2D, null)
-                gl.bindFramebuffer(gl.FRAMEBUFFER, q2.fbo)
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, q2.tex, 0)
-                gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-
 
                 return function(setS) {
                     gl.useProgram(prog)
@@ -889,6 +897,7 @@ export default function (gl) {
 
                 var u_pcg = gl.getUniformLocation(prog, "u_pcg")
                 var u_const = gl.getUniformLocation(prog, "u_const")
+                var u_alpha = gl.getUniformLocation(prog, "u_alpha")
 
                 return function() {
                     gl.useProgram(prog)
@@ -904,6 +913,8 @@ export default function (gl) {
                     gl.activeTexture(gl.TEXTURE1)
                     gl.bindTexture(gl.TEXTURE_2D, tempTex.tex)
                     gl.uniform1i(u_const, 1)
+
+                    // gl.uniform1f(u_alpha, alpha)
 
                     gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
 
@@ -932,6 +943,7 @@ export default function (gl) {
 
                 var u_pcg = gl.getUniformLocation(prog, "u_pcg")
                 var u_const = gl.getUniformLocation(prog, "u_const")
+                var u_beta = gl.getUniformLocation(prog, "u_beta")
 
                 return function() {
                     gl.useProgram(prog)
@@ -947,6 +959,8 @@ export default function (gl) {
                     gl.activeTexture(gl.TEXTURE1)
                     gl.bindTexture(gl.TEXTURE_2D, tempTex.tex)
                     gl.uniform1i(u_const, 1)
+
+                    // gl.uniform1f(u_beta, beta)
 
                     gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
 
@@ -1054,6 +1068,7 @@ export default function (gl) {
                     // for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
                     //     alphap += buf[4*j + 2] * buf[4*j + 3];
                     // }
+                    // alpha = sigma / alphap;
                     // console.log('alpha:', sigma / alphap, sigma, alphap);
 
                     // gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
@@ -1070,6 +1085,7 @@ export default function (gl) {
                     // for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
                     //     sigmanew += buf[4*j + 1] * buf[4*j + 2];
                     // }
+                    // beta = sigmanew / sigma;
                     // console.log('beta:', sigmanew / sigma, sigmanew, sigma)
 
                     // gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
@@ -1078,6 +1094,14 @@ export default function (gl) {
 
                     updateSearch()
                 }
+                var max = 0.0;
+                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
+                gl.readPixels(0,0,grid.textureLength,grid.textureLength,gl.RGBA, gl.FLOAT, buf)
+                for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
+                    var val = Math.abs(buf[4*j + 1]);
+                    if (val > max) max = val;
+                }
+                console.log('error:', max)
 
                 velocityUpdate(t)
             }

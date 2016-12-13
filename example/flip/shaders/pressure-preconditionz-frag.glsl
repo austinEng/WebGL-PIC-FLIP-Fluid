@@ -20,11 +20,11 @@ varying vec2 f_uv;
 varying vec4 val;
 
 #define GET(grid, uv, c) (uv.x < 0.0 ? 0.0 : texture2D(grid, uv)[c])
-#define Aplusi(grid, uv) GET(grid, uv, 0)
-#define Aplusj(grid, uv) GET(grid, uv, 1)
-#define Aplusk(grid, uv) GET(grid, uv, 2)
-#define Adiag(grid, uv) GET(grid, uv, 3)
-#define precon(grid, uv) GET(grid, uv, 0)
+#define Aplusi(uv) GET(u_A, uv, 0)
+#define Aplusj(uv) GET(u_A, uv, 1)
+#define Aplusk(uv) GET(u_A, uv, 2)
+#define Adiag(uv) GET(u_A, uv, 3)
+#define precon(uv) GET(u_pre, uv, 0)
 
 void main() {
   ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
@@ -54,10 +54,10 @@ void main() {
     // if (u_iter == greatestIdx) {
     if (idx.x <= u_iter && idx.y <= u_iter && idx.z <= u_iter) {
       float t = texture2D(u_pcg, f_uv)[1]
-        - Aplusi(u_A, mI) * precon(u_pre, mI) * GET(u_q, mI, 0)
-        - Aplusj(u_A, mJ) * precon(u_pre, mJ) * GET(u_q, mJ, 0)
-        - Aplusk(u_A, mK) * precon(u_pre, mK) * GET(u_q, mK, 0);
-      curr[0] = t * precon(u_pre, f_uv);
+        - Aplusi(mI) * precon(mI) * GET(u_q, mI, 0)
+        - Aplusj(mJ) * precon(mJ) * GET(u_q, mJ, 0)
+        - Aplusk(mK) * precon(mK) * GET(u_q, mK, 0);
+      curr[0] = t * precon(f_uv);
     }
 
   } else if (u_step == 1) {
@@ -65,10 +65,10 @@ void main() {
     // if (u_iter == smallestIdx) {
     if (idx.x >= u_iter && idx.y >= u_iter && idx.z >= u_iter) {
       float t = texture2D(u_q, f_uv)[0]
-        - Aplusi(u_A, f_uv) * precon(u_pre, f_uv) * GET(u_pcg, pI, 2)
-        - Aplusj(u_A, f_uv) * precon(u_pre, f_uv) * GET(u_pcg, pJ, 2)
-        - Aplusk(u_A, f_uv) * precon(u_pre, f_uv) * GET(u_pcg, pK, 2);
-      curr[2] = t * precon(u_pre, f_uv);
+        - Aplusi(f_uv) * precon(f_uv) * GET(u_pcg, pI, 2)
+        - Aplusj(f_uv) * precon(f_uv) * GET(u_pcg, pJ, 2)
+        - Aplusk(f_uv) * precon(f_uv) * GET(u_pcg, pK, 2);
+      curr[2] = t * precon(f_uv);
       if (u_setS) curr[3] = curr[2];
     }
   }

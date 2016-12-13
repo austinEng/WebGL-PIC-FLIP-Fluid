@@ -5,6 +5,7 @@ uniform sampler2D u_pcg;
 uniform sampler2D u_const;
 uniform int u_texLength;
 uniform ivec3 u_count;
+uniform float u_beta;
 
 varying vec2 f_uv;
 
@@ -20,10 +21,7 @@ void main() {
   if (((sigma <= 0.0 || 0.0 <= sigma) ? false : true)) beta = 0.0;
 
   curr[3] = curr[2] + beta*curr[3];
-
-  // if (abs(sigma) == 0.00001 || abs(sigmanew) == 0.00001) {
-  //   curr[3] = 0.0;
-  // }
+  // curr[3] = curr[2] + u_beta*curr[3];
 
   gl_FragColor = curr;
 }
