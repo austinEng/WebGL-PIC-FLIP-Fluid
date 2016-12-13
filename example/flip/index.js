@@ -84,9 +84,9 @@ renderer.add(particlePainter)
 function initialize(settings) { 
   var CELL_SIZE = 2 / Math.cbrt(settings.density) // ~8 particles per cell
   var box = new BoxRegion(settings.density, new Bound({
-    minX: -0.3, maxX: 0.3,
-    minY: -0.3, maxY: 0.4,
-    minZ: -0.3, maxZ: 0.3
+    minX: -0.2, maxX: 0.2,
+    minY: -0.3, maxY: 0.3,
+    minZ: -0.2, maxZ: 0.2
   }))
   var particles = new ParticleBuffer()
   particles.addRegion(box)
@@ -104,6 +104,8 @@ function initialize(settings) {
   sim = Sim(grid, particles, settings.solverSteps)
 }
 
+var STEP_SIZE = 1 / 60 / 2;
+
 var drawloop = Loop(
   () => {
     return sim.shouldUpdate
@@ -111,7 +113,7 @@ var drawloop = Loop(
   },
   (t) => {
     if (sim.shouldUpdate) {
-      sim.step(10 / 60)
+      sim.step(STEP_SIZE)
     }
 
     gl.enable(gl.DEPTH_TEST)
@@ -161,11 +163,11 @@ var simulationControls = {
     drawloop.start()
   },
   step: function() {
-    sim.step(10/60)
+    sim.step(STEP_SIZE)
     drawloop.start()
   },
-  density: 1000,  // particles per cubic meter
-  solverSteps: 1
+  density: 100000,  // particles per cubic meter
+  solverSteps: 10
 }
 
 initialize(simulationControls)
@@ -190,9 +192,9 @@ display.add(gridPainter, 'drawY').onChange(drawloop.start)
 display.add(gridPainter, 'drawZ').onChange(drawloop.start)
 display.add(gridPainter, 'drawTypes').onChange(drawloop.start)
 display.add(gridPainter, 'drawA').onChange(drawloop.start)
+display.add(gridPainter, 'drawDiv').onChange(drawloop.start)
 display.add(gridPainter, 'drawp').onChange(drawloop.start)
 display.add(gridPainter, 'drawr').onChange(drawloop.start)
-display.add(gridPainter, 'drawb').onChange(drawloop.start)
 display.add(gridPainter, 'drawz').onChange(drawloop.start)
 display.add(gridPainter, 'draws').onChange(drawloop.start)
 display.add(gridPainter, 'drawMIC').onChange(drawloop.start)

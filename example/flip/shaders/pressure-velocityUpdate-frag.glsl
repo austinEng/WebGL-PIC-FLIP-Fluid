@@ -20,17 +20,17 @@ void main() {
 
   vec4 current = texture2D(u_grid, f_uv);
 
-  if (!checkIdx(idx, u_count - 1)) {
-    gl_FragColor = current; 
-    return;
-  }
+  // if (!checkIdx(idx, u_count - 1)) {
+  //   gl_FragColor = current; 
+  //   return;
+  // }
 
-  bool leftFluid = CHECK_FLUID(ivec3(-1,0,0)); //texture2D(u_types, XYZtoUV(idx - ivec3(1,0,0), u_texLength, u_count))[0] == 1.0;
-  bool rightFluid = CHECK_FLUID(ivec3(1,0,0)); //texture2D(u_types, XYZtoUV(idx + ivec3(1,0,0), u_texLength, u_count))[0] == 1.0;
-  bool downFluid = CHECK_FLUID(ivec3(0,-1,0)); //texture2D(u_types, XYZtoUV(idx - ivec3(0,1,0), u_texLength, u_count))[0] == 1.0;
-  bool upFluid = CHECK_FLUID(ivec3(0,1,0)); //texture2D(u_types, XYZtoUV(idx + ivec3(0,1,0), u_texLength, u_count))[0] == 1.0;
-  bool backFluid = CHECK_FLUID(ivec3(0,0,-1)); //texture2D(u_types, XYZtoUV(idx - ivec3(0,0,1), u_texLength, u_count))[0] == 1.0;
-  bool frontFluid = CHECK_FLUID(ivec3(0,0,1)); //texture2D(u_types, XYZtoUV(idx + ivec3(0,0,1), u_texLength, u_count))[0] == 1.0;
+  bool leftFluid = CHECK_FLUID(ivec3(-1,0,0));
+  bool rightFluid = CHECK_FLUID(ivec3(0,0,0));
+  bool downFluid = CHECK_FLUID(ivec3(0,-1,0));
+  bool upFluid = CHECK_FLUID(ivec3(0,0,0));
+  bool backFluid = CHECK_FLUID(ivec3(0,0,-1));
+  bool frontFluid = CHECK_FLUID(ivec3(0,0,0));
 
   if (leftFluid || rightFluid) {
     current[0] -= u_scale * (

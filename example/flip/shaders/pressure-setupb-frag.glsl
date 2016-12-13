@@ -41,6 +41,26 @@ void main() {
     texture2D(u_A, pJ)[1] - texture2D(u_A, f_uv)[1] +
     texture2D(u_A, pK)[2] - texture2D(u_A, f_uv)[2]
   );
+
+  if (idx.x == 0) {
+    div -= u_scale * texture2D(u_A, f_uv)[0];
+  }
+  if (idx.x == u_count.x - 2) {
+    div -= u_scale * texture2D(u_A, pI)[0];
+  }
+  if (idx.y == 0) {
+    div -= u_scale * texture2D(u_A, f_uv)[1];
+  }
+  if (idx.y == u_count.y - 2) {
+    div -= u_scale * texture2D(u_A, pJ)[1];
+  }
+  if (idx.z == 0) {
+    div -= u_scale * texture2D(u_A, f_uv)[2];
+  }
+  if (idx.z == u_count.z - 2) {
+    div -= u_scale * texture2D(u_A, pK)[2];
+  }
+
                   //  p   r   z  s
   gl_FragColor = vec4(0, div, 0, 0);
   

@@ -94,6 +94,11 @@ export default function (gl) {
         fbo: gl.createFramebuffer()
       }
 
+      this.div = {
+        tex: gl.createTexture(),
+        fbo: gl.createFramebuffer()
+      }
+
       this.MIC1 = {
         tex: gl.createTexture(),
         fbo: gl.createFramebuffer()
@@ -172,6 +177,17 @@ export default function (gl) {
       gl.bindTexture(gl.TEXTURE_2D, null)
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.P.fbo)
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.P.tex, 0)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+      gl.bindTexture(gl.TEXTURE_2D, this.div.tex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      gl.bindTexture(gl.TEXTURE_2D, null)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.div.fbo)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.div.tex, 0)
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
       gl.bindTexture(gl.TEXTURE_2D, this.MIC1.tex)

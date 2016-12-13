@@ -74,21 +74,24 @@ void main() {
     // if (!checkIdx(tgtIdx, u_count - 1)) keep = 0.0;
   } else if (t == 4) {
     v = Aplusi(mI) * s;
-    if (!checkIdx(tgtIdx - ivec3(1,0,0), u_count - 1)) keep = 0.0;
+    if (!checkIdx(tgtIdx - ivec3(1,0,0), u_count - 1)) v = 0.0;
   } else if (t == 5) {
     v = Aplusj(mJ) * s;
-    if (!checkIdx(tgtIdx - ivec3(0,1,0), u_count - 1)) keep = 0.0;
+    if (!checkIdx(tgtIdx - ivec3(0,1,0), u_count - 1)) v = 0.0;
   } else if (t == 6) {
     v = Aplusk(mK) * s;
-    if (!checkIdx(tgtIdx - ivec3(0,0,1), u_count - 1)) keep = 0.0;
+    if (!checkIdx(tgtIdx - ivec3(0,0,1), u_count - 1)) v = 0.0;
   }
 
-  val = texture2D(u_pcg, tgt) / 7.0;
+  //val = texture2D(u_pcg, tgt) / 7.0;
 
-  if (!checkIdx(tgtIdx, u_count - 1) || keep == 0.0) {
-    keep = 1.0;
+  if (!checkIdx(tgtIdx, u_count - 1)) {
+    keep = 0.0;
+    //val[2] = 0.0;
+    val = vec4(0,0,0,0);
   } else {
-    val[2] = v;
+    // val[2] = v;
+    val = vec4(0, 0, v, 0);
   }
 
   gl_Position = vec4(tgt * 2.0 - 1.0, 0.0, 1.0);

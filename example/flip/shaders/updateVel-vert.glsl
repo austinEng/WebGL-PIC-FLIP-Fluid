@@ -62,8 +62,8 @@ void main() {
             gridComponentInterpolate(u_gOld, pos + velB * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)
         );
 
-        // val = 0.95 * (vel + (velA - velB)) + 0.05 * velA;
-        val = vel + (velA - velB);
+        val = 0.97 * (vel + (velA - velB)) + 0.03 * velA;
+        // val = vel + (velA - velB);
         gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);
     }
     

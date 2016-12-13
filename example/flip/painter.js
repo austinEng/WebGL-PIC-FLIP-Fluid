@@ -258,11 +258,11 @@ function Painters(gl) {
         }
 
         var painter = {
-          debugValues: true,
+          debugValues: false,
           drawTypes: false,
           drawA: false,
-          drawb: false,
-          drawp: true,
+          drawDiv: false,
+          drawp: false,
           drawr: false,
           drawz: false,
           draws: false,
@@ -286,7 +286,7 @@ function Painters(gl) {
               painter.drawA || 
               painter.drawMIC || 
               painter.drawp || 
-              painter.drawb || 
+              painter.drawDiv || 
               painter.drawr || 
               painter.drawz ||
               painter.draws) {
@@ -325,13 +325,13 @@ function Painters(gl) {
               drawTypes()
               if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state, [0])
             }
-            if (painter.drawb) {
+            if (painter.drawDiv) {
               gl.uniform1i(u_mode, 2)
               gl.uniform1i(u_c, 1)
-              gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex)
+              gl.bindTexture(gl.TEXTURE_2D, grid.div.tex)
 
               drawTypes()
-              if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state, [1])
+              if (painter.debugValues) addLabels(grid.div.fbo, [0.5, 0.5, 0.5], state, [1])
             }
             if (painter.drawr) {
               gl.uniform1i(u_mode, 2)
