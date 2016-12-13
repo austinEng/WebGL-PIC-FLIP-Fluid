@@ -50,39 +50,35 @@
 	
 	var _lib2 = _interopRequireDefault(_lib);
 	
-	var _particles = __webpack_require__(4);
+	var _particles = __webpack_require__(5);
 	
-	var _grid = __webpack_require__(5);
+	var _grid = __webpack_require__(6);
 	
 	var _grid2 = _interopRequireDefault(_grid);
 	
-	var _bound = __webpack_require__(16);
+	var _bound = __webpack_require__(17);
 	
 	var _bound2 = _interopRequireDefault(_bound);
 	
-	var _renderer = __webpack_require__(17);
+	var _renderer = __webpack_require__(18);
 	
 	var _renderer2 = _interopRequireDefault(_renderer);
 	
-	var _loop = __webpack_require__(20);
+	var _loop = __webpack_require__(21);
 	
 	var _loop2 = _interopRequireDefault(_loop);
 	
-	var _painter = __webpack_require__(22);
+	var _painter = __webpack_require__(23);
 	
 	var _painter2 = _interopRequireDefault(_painter);
 	
-	var _sim = __webpack_require__(30);
+	var _sim = __webpack_require__(31);
 	
 	var _sim2 = _interopRequireDefault(_sim);
 	
-	var _datGui = __webpack_require__(47);
+	var _datGui = __webpack_require__(61);
 	
 	var _datGui2 = _interopRequireDefault(_datGui);
-	
-	var _cg = __webpack_require__(50);
-	
-	var _cg2 = _interopRequireDefault(_cg);
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 	
@@ -99,6 +95,7 @@
 	
 	var _Compute2 = (0, _lib2.default)(gl),
 	    ComputeBuffer = _Compute2.ComputeBuffer,
+	    ComputeStorage = _Compute2.ComputeStorage,
 	    Computation = _Compute2.Computation;
 	
 	var _MAC2 = (0, _grid2.default)(gl),
@@ -107,6 +104,56 @@
 	var _Sim2 = (0, _sim2.default)(gl),
 	    Sim = _Sim2.Sim;
 	
+	var ParticleStorage = ComputeStorage({
+	  format: [{
+	    pos: 3
+	  }, {
+	    vel: 3
+	  }],
+	  type: Float32Array,
+	  dim: 3
+	});
+	
+	var particleBufferA = ComputeBuffer({
+	  storage: ParticleStorage,
+	  dim: [10, 10, 10],
+	  data: null
+	});
+	
+	var particleBufferB = ComputeBuffer({
+	  storage: ParticleStorage,
+	  dim: [10, 10, 10],
+	  data: null
+	});
+	
+	particleBufferA.setData([{
+	  pos: [1, 5, 6],
+	  vel: [0, 0, 0]
+	}, {
+	  pos: [2, 1, 3],
+	  vel: [0, 0, 0]
+	}]);
+	
+	var gravityUpdate = Computation({
+	  func: 'particlesB[index].vel = particlesA[index].vel - 9.81*t',
+	  inputs: {
+	    particlesA: ParticleStorage,
+	    t: '1f'
+	  },
+	  outputs: {
+	    particlesB: ParticleStorage
+	  }
+	});
+	
+	gravityUpdate.generate().setup({
+	  inputs: {
+	    particlesA: particleBufferA
+	  },
+	  outputs: {
+	    particlesB: particleBufferB
+	  }
+	});
+	
 	var sim;
 	var renderer = (0, _renderer2.default)(gl);
 	var particlePainter = ParticlePainter(null);
@@ -114,12 +161,12 @@
 	renderer.add(gridPainter);
 	renderer.add(particlePainter);
 	
-	function initialize(density) {
-	  var CELL_SIZE = 2 / Math.cbrt(density); // ~8 particles per cell
-	  var box = new _particles.BoxRegion(density, new _bound2.default({
-	    minX: -0.3, maxX: 0.3,
-	    minY: 0.3, maxY: 0.5,
-	    minZ: -0.3, maxZ: 0.3
+	function initialize(settings) {
+	  var CELL_SIZE = 2 / Math.cbrt(settings.density); // ~8 particles per cell
+	  var box = new _particles.BoxRegion(settings.density, new _bound2.default({
+	    minX: -0.2, maxX: 0.2,
+	    minY: -0.3, maxY: 0.3,
+	    minZ: -0.2, maxZ: 0.2
 	  }));
 	  var particles = new ParticleBuffer();
 	  particles.addRegion(box);
@@ -127,22 +174,24 @@
 	
 	  var grid = new MACGrid(new _bound2.default({
 	    minX: -0.5, maxX: 0.5,
-	    minY: -0.5, maxY: 0.6,
+	    minY: -0.5, maxY: 0.5,
 	    minZ: -0.5, maxZ: 0.5
 	  }), CELL_SIZE);
 	
 	  particlePainter.setBuffer(particles);
 	  gridPainter.setBuffer(grid);
 	
-	  sim = Sim(grid, particles);
+	  sim = Sim(grid, particles, settings.solverSteps);
 	}
+	
+	var STEP_SIZE = 1 / 60 / 2;
 	
 	var drawloop = (0, _loop2.default)(function () {
 	  return sim.shouldUpdate;
 	  // return true//renderer.isDirty()
 	}, function (t) {
 	  if (sim.shouldUpdate) {
-	    sim.step(10 / 60);
+	    sim.step(STEP_SIZE, simulationControls.precondition);
 	  }
 	
 	  gl.enable(gl.DEPTH_TEST);
@@ -164,6 +213,7 @@
 	document.body.appendChild(drawloop.execStats.domElement);
 	
 	renderer.ready.then(function () {
+	  // sim.shouldUpdate = true
 	  drawloop.start();
 	
 	  renderer.camera.controls.addEventListener('change', function (e) {
@@ -185,38 +235,69 @@
 	  },
 	  restart: function restart() {
 	    var running = sim.shouldUpdate;
-	    initialize(simulationControls.density);
+	    initialize(simulationControls);
 	    sim.shouldUpdate = running;
 	    drawloop.start();
 	  },
-	  density: 100000 // particles per cubic meter
+	  step: function step() {
+	    sim.step(STEP_SIZE, simulationControls.precondition);
+	    drawloop.start();
+	  },
+	  precondition: false,
+	  density: 100000, // particles per cubic meter
+	  solverSteps: 10
 	};
 	
-	initialize(simulationControls.density);
+	initialize(simulationControls);
 	
 	var gui = new _datGui2.default.GUI();
 	var fluidSettings = gui.addFolder('Fluid');
-	fluidSettings.add(simulationControls, 'density', 100, 2000000);
+	fluidSettings.add(simulationControls, 'density');
+	fluidSettings.add(simulationControls, 'solverSteps', 1, 100);
+	fluidSettings.add(simulationControls, 'precondition');
 	fluidSettings.open();
 	var controls = gui.addFolder('Controls');
 	controls.add(simulationControls, 'start');
 	controls.add(simulationControls, 'stop');
 	controls.add(simulationControls, 'restart');
+	controls.add(simulationControls, 'step');
 	controls.open();
 	var display = gui.addFolder('Display');
 	display.add(particlePainter, 'drawParticles').onChange(drawloop.start);
+	display.add(particlePainter, 'drawParticleValues').onChange(drawloop.start);
+	display.add(gridPainter, 'debugValues').onChange(drawloop.start);
 	display.add(gridPainter, 'drawX').onChange(drawloop.start);
 	display.add(gridPainter, 'drawY').onChange(drawloop.start);
 	display.add(gridPainter, 'drawZ').onChange(drawloop.start);
 	display.add(gridPainter, 'drawTypes').onChange(drawloop.start);
+	display.add(gridPainter, 'drawA').onChange(drawloop.start);
+	display.add(gridPainter, 'drawDiv').onChange(drawloop.start);
+	display.add(gridPainter, 'drawp').onChange(drawloop.start);
+	display.add(gridPainter, 'drawr').onChange(drawloop.start);
+	display.add(gridPainter, 'drawz').onChange(drawloop.start);
+	display.add(gridPainter, 'draws').onChange(drawloop.start);
+	display.add(gridPainter, 'drawMIC').onChange(drawloop.start);
 	display.open();
 	
-	var CG = (0, _cg2.default)(gl);
-	
-	var result = CG(gl).setup(4).setA([4, -1, -1, 0, -1, 4, 0, -1, -1, 0, 4, -1, 0, -1, -1, 4]).setb([1, 2, 3, 4]);
-	console.log(result);
-	result = result.print(result.A).print(result.b).solve().print(result.K1).print(result.K2).print(result.Minv).print(result.x);
-	console.log(result);
+	/*
+	import _CG from './cg'
+	const CG = _CG(gl)
+
+	var result = CG(gl)
+	  .setup(4)
+	  .setA([4,-1,-1,0, -1,4,0,-1, -1,0,4,-1, 0,-1,-1,4])
+	  .setb([1,2,3,4])
+	console.log(result)
+	result = result
+	  .print(result.A)
+	  .print(result.b)
+	  .solve()
+	  .print(result.K1)
+	  .print(result.K2)
+	  .print(result.Minv)
+	  .print(result.x)
+	console.log(result)
+	*/
 
 /***/ },
 /* 1 */
@@ -231,11 +312,16 @@
 	exports.default = function (gl) {
 	  if (!gl) console.error("WebGL not supported!");
 	  var webgl2Enabled = window.WebGL2RenderingContext && gl instanceof window.WebGL2RenderingContext;
-	  if (!webgl2Enabled) console.warn("WebGL 2 not supported. Falling back to WebGL 1");
-	  console.log(gl);
+	  if (!webgl2Enabled) {
+	    console.warn("WebGL 2 not supported. Falling back to WebGL 1");
+	    if (!gl.getExtension("OES_texture_float")) {
+	      console.error("Floating point textures not supported!");
+	    }
+	  }
 	
 	  return {
 	    ComputeBuffer: (0, _buffer2.default)(gl, webgl2Enabled),
+	    ComputeStorage: (0, _storage2.default)(gl, webgl2Enabled),
 	    Computation: (0, _computation2.default)(gl, webgl2Enabled)
 	  };
 	};
@@ -244,7 +330,11 @@
 	
 	var _buffer2 = _interopRequireDefault(_buffer);
 	
-	var _computation = __webpack_require__(3);
+	var _storage = __webpack_require__(3);
+	
+	var _storage2 = _interopRequireDefault(_storage);
+	
+	var _computation = __webpack_require__(4);
 	
 	var _computation2 = _interopRequireDefault(_computation);
 
@@ -260,170 +350,150 @@
 	  value: true
 	});
 	
-	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-	
 	exports.default = function (gl, webgl2Enabled) {
-	  var ext_tex_float = gl.getExtension("OES_texture_float");
-	
-	  var ArrayBuf = function () {
-	    /**
-	     * Initialize a buffer to the given size or provided data
-	     * 
-	     * @param {ArrayBuffer, SharedArrayBuffer, ArrayBufferView} data
-	     * 
-	     * @memberOf Buffer
-	     */
-	    function ArrayBuf(data) {
-	      _classCallCheck(this, ArrayBuf);
-	
-	      this.buffer = gl.createBuffer();
-	      this.hostData = data;
-	      this.length = data.length;
-	      gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-	      gl.bufferData(gl.ARRAY_BUFFER, this.hostData, gl.DYNAMIC_DRAW);
-	    }
-	
-	    /**
-	     * Bind the buffer
-	     * 
-	     * @memberOf Buffer
-	     */
-	
-	
-	    _createClass(ArrayBuf, [{
-	      key: "use",
-	      value: function use() {
-	        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-	      }
-	
-	      /**
-	       * Fetch the contents of the buffer and store them in hostData
-	       * 
-	       * @memberOf Buffer
-	       */
-	
-	    }, {
-	      key: "get",
-	      value: function get() {
-	        this.use();
-	        gl.getBufferSubData(gl.ARRAY_BUFFER, 0, this.hostData);
-	      }
-	
-	      /**
-	       * Populate the buffer with data
-	       * 
-	       * @param {ArrayBuffer, SharedArrayBuffer, ArrayBufferView} data
-	       * @param {any} [type=Compute.DYNAMIC]
-	       * 
-	       * @memberOf Buffer
-	       */
-	
-	    }, {
-	      key: "set",
-	      value: function set(data) {
-	        this.use();
-	        gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
-	      }
-	    }]);
-	
-	    return ArrayBuf;
-	  }();
-	
-	  var TextureBuf = function () {
-	    function TextureBuf(data) {
-	      _classCallCheck(this, TextureBuf);
-	
-	      this.texture = gl.createTexture();
-	      this.length = data.length;
-	
-	      this.textureLength = Math.pow(2, Math.ceil(Math.log2(Math.ceil(Math.sqrt(this.length)))));
-	      if (webgl2Enabled && false) {
-	        this.hostData = new data.constructor(this.textureLength * this.textureLength);
-	        this.hostData.set(data);
-	      } else {
-	        this.hostData = new data.constructor(this.textureLength * this.textureLength * 4);
-	        for (var i = 0; i < this.textureLength * this.textureLength; ++i) {
-	          this.hostData[4 * i] = data[i];
-	        }
-	      }
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.texture);
-	      if (data instanceof Float32Array && (ext_tex_float || webgl2Enabled)) {
-	        if (webgl2Enabled) {
-	          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, this.hostData);
-	        } else {
-	          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, this.hostData);
-	        }
-	      } else if (data instanceof Uint8Array) {
-	        if (webgl2Enabled) {
-	          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.hostData);
-	        } else {
-	          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.hostData);
-	        }
-	      } else {
-	        console.error("Array buffer type unsupported");
-	      }
-	
-	      // if (data instanceof Float32Array) {
-	
-	      // } else {
-	      //   console.error("Unsupported data type")
-	      // }
-	
-	
-	      // we want this.hostData.byteLength = 4 * powerof2
-	      /*let pixelsPerElement = data.BYTES_PER_ELEMENT / 4
-	      let minPixels = pixelsPerElement * data.length
-	      this.textureLength = Math.pow(2, Math.ceil(Math.log2(Math.ceil(Math.sqrt(minPixels)))))
-	       this.hostData = new data.constructor(this.textureLength * this.textureLength / pixelsPerElement)
-	      this.hostData.set(data)
-	       this.bytesPerElement = this.hostData.BYTES_PER_ELEMENT
-	       this.bufferView = new Uint8Array(this.hostData.buffer)
-	      this.bufferLength = this.bufferView.byteLength
-	            // console.log(data)
-	      // console.log(this.hostData)
-	      // console.log(this.bufferView)
-	       gl.bindTexture(gl.TEXTURE_2D, this.texture)
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.bufferView)*/
-	    }
-	
-	    _createClass(TextureBuf, [{
-	      key: "use",
-	      value: function use() {}
-	    }, {
-	      key: "get",
-	      value: function get() {}
-	    }, {
-	      key: "set",
-	      value: function set(data) {}
-	    }]);
-	
-	    return TextureBuf;
-	  }();
-	
-	  var ComputeBuffer = function ComputeBuffer(data, mode) {
-	    if (mode == ARRAY) {
-	      return new ArrayBuf(data);
-	    } else if (mode == TEXTURE) {
-	      return new TextureBuf(data);
-	    } else {
-	      console.error("Unsupported buffer mode");
-	    }
-	  };
-	
-	  ComputeBuffer.TEXTURE = TEXTURE;
-	  ComputeBuffer.ARRAY = ARRAY;
-	
-	  return ComputeBuffer;
+	  return ComputeBuffer.bind(null, gl, webgl2Enabled);
 	};
 	
-	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+	function ComputeBuffer(gl, webgl2Enabled, _ref) {
+	  var storage = _ref.storage,
+	      dim = _ref.dim,
+	      write = _ref.write,
+	      data = _ref.data;
 	
-	var TEXTURE = "TEXTURE";
-	var ARRAY = "ARRAY";
+	  var pixelsPerElement = storage.pixelCount();
+	  var usedPixels = pixelsPerElement * dim.reduce(function (val, length) {
+	    return val * length;
+	  }, 1);
+	
+	  var textureLength = Math.pow(2, Math.ceil(Math.log2(Math.ceil(Math.sqrt(usedPixels)))));
+	
+	  var tex = gl.createTexture();
+	  var fbo = gl.createFramebuffer();
+	
+	  var _hostData = new Float32Array(4 * textureLength * textureLength);
+	  if (data) _hostData.set(data);
+	
+	  gl.bindTexture(gl.TEXTURE_2D, tex);
+	  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, textureLength, textureLength, 0, gl.RGBA, gl.FLOAT, data == null ? null : _hostData);
+	  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	  gl.bindTexture(gl.TEXTURE_2D, null);
+	
+	  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+	  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+	  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	  var buffer = Object.create(ComputeBuffer.prototype);
+	  return Object.assign(buffer, {
+	    setData: function setData(items) {
+	      for (var i = 0; i < items.length; ++i) {
+	        _hostData.set(storage.create(items[i]), 4 * i * pixelsPerElement);
+	      }
+	      gl.bindTexture(gl.TEXTURE_2D, tex);
+	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, textureLength, textureLength, 0, gl.RGBA, gl.FLOAT, _hostData);
+	      gl.bindTexture(gl.TEXTURE_2D, null);
+	    },
+	
+	    fetch: function fetch() {
+	      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+	      gl.readPixels(0, 0, textureLength, textureLength, gl.RGBA, gl.FLOAT, _hostData);
+	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	    },
+	
+	    hostData: function hostData() {
+	      return _hostData;
+	    }
+	  });
+	}
+	
+	ComputeBuffer.prototype.toString = function () {
+	  return "ComputeBuffer";
+	};
 
 /***/ },
 /* 3 */
+/***/ function(module, exports) {
+
+	'use strict';
+	
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	
+	exports.default = function (gl, webgl2Enabled) {
+	  return ComputeStorage.bind(null, gl, webgl2Enabled);
+	};
+	
+	function ComputeStorage(gl, webgl2Enabled, _ref) {
+	  var format = _ref.format,
+	      type = _ref.type,
+	      _dim = _ref.dim;
+	
+	  if (type != Float32Array) console.error("Only Float32Array supported!");
+	
+	  var storage = Object.create(ComputeStorage.prototype);
+	
+	  var _pixelCount = format.length;
+	
+	  var internalFormat = {};
+	
+	  var _loop = function _loop(item) {
+	    var count = Object.keys(format[item]).reduce(function (val, key) {
+	      return val + format[item][key];
+	    }, 0);
+	
+	    var start = 0;
+	    for (var key in format[item]) {
+	      internalFormat[key] = {
+	        start: start,
+	        pixel: item,
+	        size: format[item][key]
+	      };
+	      start += internalFormat[key].size;
+	    }
+	
+	    if (count > 4) {
+	      console.error("Cannot have more than 4 values per pixel!");
+	    }
+	  };
+	
+	  for (var item = 0; item < format.length; ++item) {
+	    _loop(item);
+	  }
+	
+	  function create(params) {
+	    var arr = new type(4 * _pixelCount);
+	    for (var param in params) {
+	      if (params[param] instanceof Array) {
+	        for (var i = 0; i < params[param].length; ++i) {
+	          arr[internalFormat[param].pixel * 4 + internalFormat[param].start + i] = params[param][i];
+	        }
+	      } else if (typeof params[param] === "number") {
+	        arr[internalFormat[param].pixel * 4 + internalFormat[param].start] = params[param];
+	      }
+	    }
+	    return arr;
+	  }
+	
+	  return Object.assign(storage, {
+	    create: create,
+	    pixelCount: function pixelCount() {
+	      return _pixelCount;
+	    },
+	    dim: function dim() {
+	      return _dim;
+	    }
+	  });
+	}
+	
+	ComputeStorage.prototype.toString = function () {
+	  return "ComputeStorage";
+	};
+
+/***/ },
+/* 4 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -434,10 +504,9 @@
 	
 	var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
 	
-	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-	
 	exports.default = function (gl, webgl2Enabled) {
 	  var ComputeBuffer = (0, _buffer2.default)(gl, webgl2Enabled);
+	  var ComputeStorage = (0, _storage2.default)(gl, webgl2Enabled);
 	
 	  var fullscreenQuadVBO = function () {
 	    var verts = new Float32Array([1.0, 1.0, -1.0, 1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0]);
@@ -460,91 +529,180 @@
 	    return shader;
 	  }();
 	
-	  var Computation = function () {
-	    function Computation(func) {
-	      _classCallCheck(this, Computation);
+	  var UV = "UV";
+	  var POINTS = "POINTS";
 	
-	      var _arguments = Array.prototype.slice.call(arguments);
+	  function Computation(_ref) {
+	    var func = _ref.func,
+	        inputs = _ref.inputs,
+	        outputs = _ref.outputs;
 	
-	      func = _arguments[0];
-	      this.types = _arguments.slice(1);
+	    // var argc = func.length;
 	
-	      this.argc = func.length;
-	      if (!webgl2Enabled) {
-	        for (var i in this.types) {
-	          this.types[i] = ComputeBuffer.TEXTURE;
-	        }
-	      }
-	      this.prog = gl.createProgram();
-	      this.glslHeader = [];
-	      this.parse(func.toString());
-	      console.log(this);
+	    function setupShader(body, argNames) {
+	      console.log(argNames);
 	    }
 	
-	    _createClass(Computation, [{
-	      key: 'parse',
-	      value: function parse(str) {
-	        var parseRE = /\(([\s\S]*)\)\s*{([\s\S]*)}/g;
+	    for (var name in inputs) {
+	      if (inputs[name] instanceof ComputeStorage) {
+	        console.log(name, inputs[name]);
+	        var readRE = new RegExp('=[\\s\\S]*' + name + '\\[([\\s\\S]+?)\\]\\.(\\S+?)\\s', 'g');
+	        var writeRE = new RegExp(name + '\\[([\\s\\S]+?)\\]\\.(\\S+?)\\s*=', 'g');
 	
-	        var _parseRE$exec = parseRE.exec(str),
-	            _parseRE$exec2 = _slicedToArray(_parseRE$exec, 3),
-	            _ = _parseRE$exec2[0],
-	            argNames = _parseRE$exec2[1],
-	            body = _parseRE$exec2[2];
+	        var readMatch = readRE.exec(func);
+	        while (readMatch != null) {
+	          var _readMatch = readMatch,
+	              _readMatch2 = _slicedToArray(_readMatch, 3),
+	              _ = _readMatch2[0],
+	              indexMapping = _readMatch2[1],
+	              element = _readMatch2[2];
 	
-	        argNames = argNames.split(", ");
-	        this.setupInput(argNames);
-	        this.setupBody(body, argNames);
-	      }
-	    }, {
-	      key: 'setupInput',
-	      value: function setupInput(argNames) {
-	        for (var i in argNames) {
-	          var name = argNames[i];
-	          var type = this.types[i];
-	          if (type == ComputeBuffer.TEXTURE) {
-	            this.glslHeader.push('uniform sampler2D ' + name + ';');
-	          } else if (type == ComputeBuffer.ARRAY) {
-	            this.glslHeader.push('attribute float ' + name + ';');
-	          }
+	          console.log(indexMapping, element);
+	          readMatch = readRE.exec(func);
 	        }
 	
-	        console.log(this.glslHeader.join('\n'));
-	      }
-	    }, {
-	      key: 'setupBody',
-	      value: function setupBody(body, argNames) {
-	        for (var i in argNames) {
-	          var name = argNames[i];
-	          var type = this.types[i];
+	        var writeMatch = writeRE.exec(func);
+	        while (writeMatch != null) {
+	          var _writeMatch = writeMatch,
+	              _writeMatch2 = _slicedToArray(_writeMatch, 3),
+	              _ = _writeMatch2[0],
+	              indexMapping = _writeMatch2[1],
+	              element = _writeMatch2[2];
 	
-	          if (type == ComputeBuffer.TEXTURE) {
-	            body = body.replace(RegExp(name + '[.+?]'), 'texture2D(' + name + ')');
-	          }
-	          console.log(body);
+	          console.log(indexMapping, element);
+	          writeMatch = writeRE.exec(func);
 	        }
 	      }
-	    }, {
-	      key: 'exec',
-	      value: function exec() {}
-	    }]);
+	    }
 	
-	    return Computation;
-	  }();
+	    function glslType(type) {
+	      if (type instanceof ComputeStorage) return "sampler2D";
+	      switch (type) {
+	        case '1f':
+	          return 'float';
+	        case '2f':
+	          return 'vec2';
+	        case '3f':
+	          return 'vec3';
+	        case '4f':
+	          return 'vec4';
+	        case '1i':
+	          return 'int';
+	        case '2i':
+	          return 'ivec2';
+	        case '3i':
+	          return 'ivec3';
+	        case '4i':
+	          return 'ivec4';
+	        case '1b':
+	          return 'bool';
+	        case '2b':
+	          return 'bvec2';
+	        case '3b':
+	          return 'bvec3';
+	        case '4b':
+	          return 'bvec4';
+	      }
+	    }
+	
+	    function generate() {
+	      var uniforms = "";
+	
+	      for (var _name in inputs) {
+	        if (inputs[_name] instanceof ComputeStorage) {
+	          uniforms += 'uniform int ' + _name + '_textureLength;\n';
+	          uniforms += 'uniform ivec' + inputs[_name].dim() + ' ' + _name + '_dim;\n';
+	        }
+	        uniforms += 'uniform ' + glslType(inputs[_name]) + ' ' + _name + ';\n';
+	      }
+	      for (var _name2 in outputs) {
+	        if (outputs[_name2] instanceof ComputeStorage) {
+	          uniforms += 'uniform int ' + _name2 + '_textureLength;\n';
+	          uniforms += 'uniform ivec' + outputs[_name2].dim() + ' ' + _name2 + '_dim;\n';
+	        }
+	      }
+	      console.log(uniforms);
+	
+	      return {
+	        setup: function setup(_ref2) {
+	          var inputs = _ref2.inputs,
+	              outputs = _ref2.outputs;
+	
+	          console.log(inputs);
+	          console.log(outputs);
+	        }
+	      };
+	    }
+	
+	    return {
+	      generate: generate
+	    };
+	  }
 	
 	  return Computation;
+	
+	  /*class Computation {
+	    constructor(func) {
+	      [func, ...this.types] = arguments
+	      this.argc = func.length
+	      if (!webgl2Enabled) {
+	        for (let i in this.types) {
+	          this.types[i] = ComputeBuffer.TEXTURE
+	        }
+	      }
+	      this.prog = gl.createProgram()
+	      this.glslHeader = []
+	      this.parse(func.toString())
+	      console.log(this)
+	    }
+	      parse(str) {
+	      let parseRE = /\(([\s\S]*)\)\s*{([\s\S]*)}/g
+	      let [_, argNames, body] = parseRE.exec(str)
+	      argNames = argNames.split(", ")
+	      this.setupInput(argNames)
+	      this.setupBody(body, argNames)
+	    }
+	      setupInput(argNames) {
+	      for (let i in argNames) {
+	        let name = argNames[i]
+	        let type = this.types[i]
+	        if (type == ComputeBuffer.TEXTURE) {
+	          this.glslHeader.push(`uniform sampler2D ${name};`)
+	        } else if (type == ComputeBuffer.ARRAY) {
+	          this.glslHeader.push(`attribute float ${name};`)
+	        }
+	      }
+	        console.log(this.glslHeader.join('\n'))
+	    }
+	      setupBody(body, argNames) {
+	      for (let i in argNames) {
+	        let name = argNames[i]
+	        let type = this.types[i]
+	        
+	        if (type == ComputeBuffer.TEXTURE) {
+	          body = body.replace(RegExp(`${name}\[.+?\]`), `texture2D(${name})`)
+	        }
+	        console.log(body)
+	      }
+	    }
+	      exec() {
+	      }
+	  }
+	    return Computation*/
 	};
 	
 	var _buffer = __webpack_require__(2);
 	
 	var _buffer2 = _interopRequireDefault(_buffer);
+	
+	var _storage = __webpack_require__(3);
+	
+	var _storage2 = _interopRequireDefault(_storage);
 
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-
 /***/ },
-/* 4 */
+/* 5 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -733,182 +891,273 @@
 	}(ParticleRegion);
 
 /***/ },
-/* 5 */
+/* 6 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 	
 	Object.defineProperty(exports, "__esModule", {
-	  value: true
+	      value: true
 	});
 	
 	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 	
 	exports.default = function (gl) {
-	  var _Compute2 = (0, _lib2.default)(gl),
-	      ComputeBuffer = _Compute2.ComputeBuffer;
+	      var _Compute2 = (0, _lib2.default)(gl),
+	          ComputeBuffer = _Compute2.ComputeBuffer;
 	
-	  var Grid = function Grid(bound, offset, cellSize, ArrType) {
-	    _classCallCheck(this, Grid);
+	      var Grid = function Grid(bound, offset, cellSize, ArrType) {
+	            _classCallCheck(this, Grid);
 	
-	    this.bound = bound;
-	    this.offset = offset;
-	    this.cellSize = cellSize;
-	    this.count = _glMatrix.vec3.create();
+	            this.bound = bound;
+	            this.offset = offset;
+	            this.cellSize = cellSize;
+	            this.count = _glMatrix.vec3.create();
 	
-	    _glMatrix.vec3.sub(this.count, this.bound._size, offset);
-	    _glMatrix.vec3.scale(this.count, this.count, 1.0 / this.cellSize);
-	    _glMatrix.vec3.add(this.count, this.count, _glMatrix.vec3.fromValues(1, 1, 1));
-	    _glMatrix.vec3.floor(this.count, this.count);
+	            _glMatrix.vec3.sub(this.count, this.bound._size, offset);
+	            _glMatrix.vec3.scale(this.count, this.count, 1.0 / this.cellSize);
+	            _glMatrix.vec3.add(this.count, this.count, _glMatrix.vec3.fromValues(1, 1, 1));
+	            _glMatrix.vec3.floor(this.count, this.count);
 	
-	    var _buffer = new ArrType(this.count[0] * this.count[1] * this.count[2]);
-	    this.buffer = new ComputeBuffer(_buffer, ComputeBuffer.TEXTURE);
-	    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	    gl.bindTexture(gl.TEXTURE_2D, null);
+	            var _buffer = new ArrType(this.count[0] * this.count[1] * this.count[2]);
+	            this.buffer = new ComputeBuffer(_buffer, ComputeBuffer.TEXTURE);
+	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	            gl.bindTexture(gl.TEXTURE_2D, null);
 	
-	    this.fbo = gl.createFramebuffer();
-	    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
-	    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.buffer.texture, 0);
-	    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	  };
-	
-	  var MACGrid = function () {
-	    function MACGrid(bound, cellSize) {
-	      _classCallCheck(this, MACGrid);
-	
-	      // this.bound = bound
-	      this.min = _glMatrix.vec3.fromValues(bound.minX, bound.minY, bound.minZ);
-	      this.max = _glMatrix.vec3.fromValues(bound.maxX, bound.maxY, bound.maxZ);
-	      this.cellSize = cellSize;
-	
-	      // let cOffset = vec3.fromValues(0.5, 0.5, 0.5)
-	      // let xOffset = vec3.fromValues(0.5, 0.0, 0.5)
-	      // let yOffset = vec3.fromValues(0.0, 0.5, 0.5)
-	      // let zOffset = vec3.fromValues(0.5, 0.5, 0.0)
-	      // vec3.scale(cOffset, cOffset, cellSize)
-	      // vec3.scale(xOffset, xOffset, cellSize)
-	      // vec3.scale(yOffset, yOffset, cellSize)
-	      // vec3.scale(zOffset, zOffset, cellSize)
-	
-	      // this.grid = new Grid(bound, cOffset, cellSize, Uint8Array)
-	      // this.gU = new Grid(bound, xOffset, cellSize, Float32Array)
-	      // this.gV = new Grid(bound, yOffset, cellSize, Float32Array)
-	      // this.gW = new Grid(bound, zOffset, cellSize, Float32Array)
-	      // this.gU_old = new Grid(bound, xOffset, cellSize, Float32Array)
-	      // this.gV_old = new Grid(bound, yOffset, cellSize, Float32Array)
-	      // this.gW_old = new Grid(bound, zOffset, cellSize, Float32Array)
-	      // this.gP = new Grid(bound, cOffset, cellSize, Float32Array)
-	      // this.gType = new Grid(bound, cOffset, cellSize, Uint8Array)
-	
-	      // A: U,V,W,P
-	      // B: U,V,W,Type (old)
-	
-	      this.count = _glMatrix.vec3.create();
-	      _glMatrix.vec3.scale(this.count, bound._size, 1.0 / this.cellSize);
-	      _glMatrix.vec3.add(this.count, this.count, _glMatrix.vec3.fromValues(1, 1, 1));
-	      _glMatrix.vec3.floor(this.count, this.count);
-	      var minPixels = this.count[0] * this.count[1] * this.count[2];
-	      this.textureLength = Math.pow(2, Math.ceil(Math.log2(Math.ceil(Math.sqrt(minPixels)))));
-	
-	      this.A = {
-	        tex: gl.createTexture(),
-	        fbo: gl.createFramebuffer()
+	            this.fbo = gl.createFramebuffer();
+	            gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+	            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.buffer.texture, 0);
+	            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 	      };
 	
-	      this.B = {
-	        tex: gl.createTexture(),
-	        fbo: gl.createFramebuffer()
+	      var MACGrid = function () {
+	            function MACGrid(bound, cellSize) {
+	                  _classCallCheck(this, MACGrid);
+	
+	                  // this.bound = bound
+	                  this.min = _glMatrix.vec3.fromValues(bound.minX, bound.minY, bound.minZ);
+	                  this.max = _glMatrix.vec3.fromValues(bound.maxX, bound.maxY, bound.maxZ);
+	                  this.cellSize = cellSize;
+	
+	                  // let cOffset = vec3.fromValues(0.5, 0.5, 0.5)
+	                  // let xOffset = vec3.fromValues(0.5, 0.0, 0.5)
+	                  // let yOffset = vec3.fromValues(0.0, 0.5, 0.5)
+	                  // let zOffset = vec3.fromValues(0.5, 0.5, 0.0)
+	                  // vec3.scale(cOffset, cOffset, cellSize)
+	                  // vec3.scale(xOffset, xOffset, cellSize)
+	                  // vec3.scale(yOffset, yOffset, cellSize)
+	                  // vec3.scale(zOffset, zOffset, cellSize)
+	
+	                  // this.grid = new Grid(bound, cOffset, cellSize, Uint8Array)
+	                  // this.gU = new Grid(bound, xOffset, cellSize, Float32Array)
+	                  // this.gV = new Grid(bound, yOffset, cellSize, Float32Array)
+	                  // this.gW = new Grid(bound, zOffset, cellSize, Float32Array)
+	                  // this.gU_old = new Grid(bound, xOffset, cellSize, Float32Array)
+	                  // this.gV_old = new Grid(bound, yOffset, cellSize, Float32Array)
+	                  // this.gW_old = new Grid(bound, zOffset, cellSize, Float32Array)
+	                  // this.gP = new Grid(bound, cOffset, cellSize, Float32Array)
+	                  // this.gType = new Grid(bound, cOffset, cellSize, Uint8Array)
+	
+	                  // A: U,V,W,P
+	                  // B: U,V,W,Type (old)
+	
+	                  this.count = _glMatrix.vec3.create();
+	                  _glMatrix.vec3.scale(this.count, bound._size, 1.0 / this.cellSize);
+	                  _glMatrix.vec3.add(this.count, this.count, _glMatrix.vec3.fromValues(1, 1, 1));
+	                  _glMatrix.vec3.floor(this.count, this.count);
+	                  var minPixels = this.count[0] * this.count[1] * this.count[2];
+	                  this.textureLength = Math.pow(2, Math.ceil(Math.log2(Math.ceil(Math.sqrt(minPixels)))));
+	
+	                  this.A = {
+	                        tex: gl.createTexture(),
+	                        fbo: gl.createFramebuffer()
+	                  };
+	
+	                  this.B = {
+	                        tex: gl.createTexture(),
+	                        fbo: gl.createFramebuffer()
+	                  };
+	
+	                  this.old = {
+	                        tex: gl.createTexture(),
+	                        fbo: gl.createFramebuffer()
+	                  };
+	
+	                  this.T = {
+	                        tex: gl.createTexture(),
+	                        fbo: gl.createFramebuffer()
+	                  };
+	
+	                  this.P = {
+	                        tex: gl.createTexture(),
+	                        fbo: gl.createFramebuffer()
+	                  };
+	
+	                  this.div = {
+	                        tex: gl.createTexture(),
+	                        fbo: gl.createFramebuffer()
+	                  };
+	
+	                  this.MIC1 = {
+	                        tex: gl.createTexture(),
+	                        fbo: gl.createFramebuffer()
+	                  };
+	
+	                  this.MIC2 = {
+	                        tex: gl.createTexture(),
+	                        fbo: gl.createFramebuffer()
+	                  };
+	
+	                  this.PCG1 = {
+	                        tex: gl.createTexture(),
+	                        fbo: gl.createFramebuffer()
+	                  };
+	
+	                  this.PCG2 = {
+	                        tex: gl.createTexture(),
+	                        fbo: gl.createFramebuffer()
+	                  };
+	
+	                  this.Type = {
+	                        tex: this.B.tex,
+	                        fbo: this.B.fbo
+	                  };
+	
+	                  gl.bindTexture(gl.TEXTURE_2D, this.A.tex);
+	                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                  gl.bindTexture(gl.TEXTURE_2D, null);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, this.A.fbo);
+	                  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.A.tex, 0);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                  gl.bindTexture(gl.TEXTURE_2D, this.B.tex);
+	                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                  gl.bindTexture(gl.TEXTURE_2D, null);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, this.B.fbo);
+	                  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.B.tex, 0);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                  gl.bindTexture(gl.TEXTURE_2D, this.old.tex);
+	                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                  gl.bindTexture(gl.TEXTURE_2D, null);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, this.old.fbo);
+	                  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.old.tex, 0);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                  gl.bindTexture(gl.TEXTURE_2D, this.T.tex);
+	                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                  gl.bindTexture(gl.TEXTURE_2D, null);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, this.T.fbo);
+	                  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.T.tex, 0);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                  gl.bindTexture(gl.TEXTURE_2D, this.P.tex);
+	                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                  gl.bindTexture(gl.TEXTURE_2D, null);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, this.P.fbo);
+	                  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.P.tex, 0);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                  gl.bindTexture(gl.TEXTURE_2D, this.div.tex);
+	                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                  gl.bindTexture(gl.TEXTURE_2D, null);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, this.div.fbo);
+	                  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.div.tex, 0);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                  gl.bindTexture(gl.TEXTURE_2D, this.MIC1.tex);
+	                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                  gl.bindTexture(gl.TEXTURE_2D, null);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, this.MIC1.fbo);
+	                  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.MIC1.tex, 0);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                  gl.bindTexture(gl.TEXTURE_2D, this.MIC2.tex);
+	                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                  gl.bindTexture(gl.TEXTURE_2D, null);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, this.MIC2.fbo);
+	                  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.MIC2.tex, 0);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                  gl.bindTexture(gl.TEXTURE_2D, this.PCG1.tex);
+	                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                  gl.bindTexture(gl.TEXTURE_2D, null);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, this.PCG1.fbo);
+	                  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.PCG1.tex, 0);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                  gl.bindTexture(gl.TEXTURE_2D, this.PCG2.tex);
+	                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                  gl.bindTexture(gl.TEXTURE_2D, null);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, this.PCG2.fbo);
+	                  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.PCG2.tex, 0);
+	                  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                  console.log(this);
+	            }
+	
+	            _createClass(MACGrid, [{
+	                  key: 'swap',
+	                  value: function swap() {
+	                        var temp = this.A;
+	                        this.A = this.B;
+	                        this.B = temp;
+	                  }
+	            }]);
+	
+	            return MACGrid;
+	      }();
+	
+	      return {
+	            Grid: Grid,
+	            MACGrid: MACGrid
 	      };
-	
-	      this.old = {
-	        tex: gl.createTexture(),
-	        fbo: gl.createFramebuffer()
-	      };
-	
-	      this.T = {
-	        tex: gl.createTexture(),
-	        fbo: gl.createFramebuffer()
-	      };
-	
-	      this.P = {
-	        tex: this.A.tex,
-	        fbo: this.A.fbo
-	      };
-	
-	      this.Type = {
-	        tex: this.B.tex,
-	        fbo: this.B.fbo
-	      };
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.A.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.A.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.A.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.B.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.B.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.B.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.old.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.old.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.old.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.T.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.T.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.T.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      console.log(this);
-	    }
-	
-	    _createClass(MACGrid, [{
-	      key: 'swap',
-	      value: function swap() {
-	        var temp = this.A;
-	        this.A = this.B;
-	        this.B = temp;
-	      }
-	    }]);
-	
-	    return MACGrid;
-	  }();
-	
-	  return {
-	    Grid: Grid,
-	    MACGrid: MACGrid
-	  };
 	};
 	
-	var _glMatrix = __webpack_require__(6);
+	var _glMatrix = __webpack_require__(7);
 	
 	var _lib = __webpack_require__(1);
 	
@@ -919,7 +1168,7 @@
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 /***/ },
-/* 6 */
+/* 7 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/**
@@ -950,18 +1199,18 @@
 	THE SOFTWARE. */
 	// END HEADER
 	
-	exports.glMatrix = __webpack_require__(7);
-	exports.mat2 = __webpack_require__(8);
-	exports.mat2d = __webpack_require__(9);
-	exports.mat3 = __webpack_require__(10);
-	exports.mat4 = __webpack_require__(11);
-	exports.quat = __webpack_require__(12);
-	exports.vec2 = __webpack_require__(15);
-	exports.vec3 = __webpack_require__(13);
-	exports.vec4 = __webpack_require__(14);
+	exports.glMatrix = __webpack_require__(8);
+	exports.mat2 = __webpack_require__(9);
+	exports.mat2d = __webpack_require__(10);
+	exports.mat3 = __webpack_require__(11);
+	exports.mat4 = __webpack_require__(12);
+	exports.quat = __webpack_require__(13);
+	exports.vec2 = __webpack_require__(16);
+	exports.vec3 = __webpack_require__(14);
+	exports.vec4 = __webpack_require__(15);
 
 /***/ },
-/* 7 */
+/* 8 */
 /***/ function(module, exports) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -1037,7 +1286,7 @@
 
 
 /***/ },
-/* 8 */
+/* 9 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -1060,7 +1309,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(7);
+	var glMatrix = __webpack_require__(8);
 	
 	/**
 	 * @class 2x2 Matrix
@@ -1479,7 +1728,7 @@
 
 
 /***/ },
-/* 9 */
+/* 10 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -1502,7 +1751,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(7);
+	var glMatrix = __webpack_require__(8);
 	
 	/**
 	 * @class 2x3 Matrix
@@ -1954,7 +2203,7 @@
 
 
 /***/ },
-/* 10 */
+/* 11 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -1977,7 +2226,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(7);
+	var glMatrix = __webpack_require__(8);
 	
 	/**
 	 * @class 3x3 Matrix
@@ -2706,7 +2955,7 @@
 
 
 /***/ },
-/* 11 */
+/* 12 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -2729,7 +2978,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(7);
+	var glMatrix = __webpack_require__(8);
 	
 	/**
 	 * @class 4x4 Matrix
@@ -4848,7 +5097,7 @@
 
 
 /***/ },
-/* 12 */
+/* 13 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -4871,10 +5120,10 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(7);
-	var mat3 = __webpack_require__(10);
-	var vec3 = __webpack_require__(13);
-	var vec4 = __webpack_require__(14);
+	var glMatrix = __webpack_require__(8);
+	var mat3 = __webpack_require__(11);
+	var vec3 = __webpack_require__(14);
+	var vec4 = __webpack_require__(15);
 	
 	/**
 	 * @class Quaternion
@@ -5454,7 +5703,7 @@
 
 
 /***/ },
-/* 13 */
+/* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -5477,7 +5726,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(7);
+	var glMatrix = __webpack_require__(8);
 	
 	/**
 	 * @class 3 Dimensional Vector
@@ -6237,7 +6486,7 @@
 
 
 /***/ },
-/* 14 */
+/* 15 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -6260,7 +6509,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(7);
+	var glMatrix = __webpack_require__(8);
 	
 	/**
 	 * @class 4 Dimensional Vector
@@ -6852,7 +7101,7 @@
 
 
 /***/ },
-/* 15 */
+/* 16 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -6875,7 +7124,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(7);
+	var glMatrix = __webpack_require__(8);
 	
 	/**
 	 * @class 2 Dimensional Vector
@@ -7445,7 +7694,7 @@
 
 
 /***/ },
-/* 16 */
+/* 17 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -7456,7 +7705,7 @@
 	
 	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 	
-	var _glMatrix = __webpack_require__(6);
+	var _glMatrix = __webpack_require__(7);
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 	
@@ -7487,7 +7736,7 @@
 	exports.default = Bound;
 
 /***/ },
-/* 17 */
+/* 18 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -7496,8 +7745,8 @@
 	  value: true
 	});
 	exports.default = Renderer;
-	var THREE = __webpack_require__(18);
-	var OrbitControls = __webpack_require__(19)(THREE);
+	var THREE = __webpack_require__(19);
+	var OrbitControls = __webpack_require__(20)(THREE);
 	
 	function Camera(canvas) {
 	  var camera = new THREE.PerspectiveCamera(10, canvas.width / canvas.height, 0.1, 1000);
@@ -7541,6 +7790,7 @@
 	
 	    for (var i = 0; i < drawables.length; ++i) {
 	      drawables[i].draw({
+	        camera: camera,
 	        cameraMat: cameraMat,
 	        projMat: camera.projectionMatrix,
 	        viewMat: camera.matrixWorldInverse
@@ -7586,7 +7836,7 @@
 	}
 
 /***/ },
-/* 18 */
+/* 19 */
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
@@ -49889,7 +50139,7 @@
 
 
 /***/ },
-/* 19 */
+/* 20 */
 /***/ function(module, exports) {
 
 	module.exports = function(THREE) {
@@ -51014,7 +51264,7 @@
 
 
 /***/ },
-/* 20 */
+/* 21 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -51074,14 +51324,14 @@
 	  };
 	};
 	
-	var _statsJs = __webpack_require__(21);
+	var _statsJs = __webpack_require__(22);
 	
 	var _statsJs2 = _interopRequireDefault(_statsJs);
 
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /***/ },
-/* 21 */
+/* 22 */
 /***/ function(module, exports) {
 
 	// stats.js - http://github.com/mrdoob/stats.js
@@ -51093,7 +51343,7 @@
 
 
 /***/ },
-/* 22 */
+/* 23 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -51102,10 +51352,13 @@
 	  value: true
 	});
 	
-	var _glMatrix = __webpack_require__(6);
+	var _glMatrix = __webpack_require__(7);
+	
+	var THREE = __webpack_require__(19);
+	
 	
 	function Painters(gl) {
-	  var _require = __webpack_require__(23)(gl),
+	  var _require = __webpack_require__(24)(gl),
 	      getShader = _require.getShader,
 	      addShaders = _require.addShaders;
 	
@@ -51115,8 +51368,8 @@
 	  (function () {
 	    var prog = gl.createProgram();
 	
-	    var vs = getShader(__webpack_require__(24), gl.VERTEX_SHADER);
-	    var fs = getShader(__webpack_require__(25), gl.FRAGMENT_SHADER);
+	    var vs = getShader(__webpack_require__(25), gl.VERTEX_SHADER);
+	    var fs = getShader(__webpack_require__(26), gl.FRAGMENT_SHADER);
 	    addShaders(prog, [vs, fs]);
 	
 	    var v_id = gl.getAttribLocation(prog, "v_id");
@@ -51126,14 +51379,22 @@
 	
 	    ParticlePainter = function ParticlePainter(_particles) {
 	      var particles = _particles;
+	      var readBuffer;
 	      var painter = {
 	        drawParticles: true,
+	        drawParticleValues: false,
 	        setBuffer: function setBuffer(_particles) {
 	          particles = _particles;
+	          readBuffer = new Float32Array(4 * particles.textureLength * particles.textureLength);
 	        }
 	      };
 	
 	      function draw(state) {
+	        var els = document.getElementsByClassName('particle-label');
+	        while (els[0]) {
+	          els[0].parentNode.removeChild(els[0]);
+	        }
+	
 	        if (!painter.drawParticles) return;
 	        gl.useProgram(prog);
 	
@@ -51150,6 +51411,50 @@
 	        gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
 	        gl.drawArrays(gl.POINTS, 0, particles.length);
 	        gl.disableVertexAttribArray(v_id);
+	
+	        if (painter.drawParticleValues) {
+	
+	          gl.bindFramebuffer(gl.FRAMEBUFFER, particles.A.fbo);
+	          gl.readPixels(0, 0, particles.textureLength, particles.textureLength, gl.RGBA, gl.FLOAT, readBuffer);
+	          // console.log(readBuffer)
+	          for (var idx = 0; idx < readBuffer.length / 8; ++idx) {
+	            if (idx >= particles.length) break;
+	            var px = readBuffer[idx * 8 + 0];
+	            var py = readBuffer[idx * 8 + 1];
+	            var pz = readBuffer[idx * 8 + 2];
+	            var vx = readBuffer[idx * 8 + 4];
+	            var vy = readBuffer[idx * 8 + 5];
+	            var vz = readBuffer[idx * 8 + 6];
+	            // console.log(px, py, pz, vx, vy, vz)
+	
+	            var pos = new THREE.Vector3(px, py, pz).project(state.camera).add(new THREE.Vector3(1, 1, 0)).multiply(new THREE.Vector3(0.5 * window.innerWidth, 0.5 * window.innerHeight, 1));
+	
+	            var label = document.createElement('span');
+	
+	            var text = document.createTextNode([px, py, pz].map(function (num) {
+	              return Math.round(num * 100000) / 100000;
+	            }).join(", "));
+	            label.appendChild(text);
+	            label.appendChild(document.createElement('br'));
+	            text = document.createTextNode([vx, vy, vz].map(function (num) {
+	              return Math.round(num * 100000) / 100000;
+	            }).join(", "));
+	            label.appendChild(text);
+	
+	            label.style.position = 'absolute';
+	            label.style.left = pos.x;
+	            label.style.top = window.innerHeight - pos.y;
+	            // label.style.backgroundColor = "#333"
+	            label.style.color = "#ddd";
+	            label.style.padding = "1px 3px";
+	            label.style.fontSize = "10px";
+	            label.style.userSelect = "none";
+	            label.style.zIndex = '' + Math.floor(1000 - 1000 * pos.z);
+	            label.className = 'particle-label';
+	            document.body.appendChild(label);
+	          }
+	          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	        }
 	      }
 	
 	      painter.draw = draw;
@@ -51160,8 +51465,8 @@
 	
 	  (function () {
 	    var progcube = gl.createProgram();
-	    var vs = getShader(__webpack_require__(26), gl.VERTEX_SHADER);
-	    var fs = getShader(__webpack_require__(27), gl.FRAGMENT_SHADER);
+	    var vs = getShader(__webpack_require__(27), gl.VERTEX_SHADER);
+	    var fs = getShader(__webpack_require__(28), gl.FRAGMENT_SHADER);
 	    addShaders(progcube, [vs, fs]);
 	
 	    var u_grid2 = gl.getUniformLocation(progcube, "u_grid");
@@ -51170,13 +51475,15 @@
 	    var u_cellSize2 = gl.getUniformLocation(progcube, "u_cellSize");
 	    var u_texLength2 = gl.getUniformLocation(progcube, "u_texLength");
 	    var u_viewProj2 = gl.getUniformLocation(progcube, "u_viewProj");
+	    var u_mode = gl.getUniformLocation(progcube, "u_mode");
+	    var u_c = gl.getUniformLocation(progcube, "u_c");
 	
 	    var v_id = gl.getAttribLocation(progcube, "v_id");
 	
 	    var progline = gl.createProgram();
 	
-	    vs = getShader(__webpack_require__(28), gl.VERTEX_SHADER);
-	    fs = getShader(__webpack_require__(29), gl.FRAGMENT_SHADER);
+	    vs = getShader(__webpack_require__(29), gl.VERTEX_SHADER);
+	    fs = getShader(__webpack_require__(30), gl.FRAGMENT_SHADER);
 	    addShaders(progline, [vs, fs]);
 	
 	    var u_grid = gl.getUniformLocation(progline, "u_grid");
@@ -51196,6 +51503,7 @@
 	
 	      var buf2 = gl.createBuffer();
 	      var buf1 = gl.createBuffer();
+	      var readBuffer;
 	
 	      function setup(grid) {
 	        gl.bindBuffer(gl.ARRAY_BUFFER, buf2);
@@ -51215,6 +51523,8 @@
 	        buf1.length = data.length;
 	        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
 	        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	
+	        readBuffer = new Float32Array(grid.textureLength * grid.textureLength * 4);
 	      }
 	
 	      if (grid) setup(grid);
@@ -51250,8 +51560,60 @@
 	        gl.disableVertexAttribArray(v_id);
 	      }
 	
+	      function addLabels(fbo, offset, state, indices) {
+	        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+	        gl.readPixels(0, 0, grid.textureLength, grid.textureLength, gl.RGBA, gl.FLOAT, readBuffer);
+	
+	        var _loop = function _loop(idx) {
+	          if (idx >= grid.count[0] * grid.count[1] * grid.count[2]) return 'continue';
+	
+	          var z = Math.floor(idx / (grid.count[0] * grid.count[1]));
+	          var y = Math.floor((idx - z * (grid.count[0] * grid.count[1])) / grid.count[0]);
+	          var x = idx - y * grid.count[0] - z * (grid.count[0] * grid.count[1]);
+	
+	          if (x >= grid.count[0] - 1) return 'continue';
+	          if (y >= grid.count[1] - 1) return 'continue';
+	          if (z >= grid.count[2] - 1) return 'continue';
+	
+	          var pos = new THREE.Vector3((offset[0] + x) * grid.cellSize + grid.min[0], (offset[1] + y) * grid.cellSize + grid.min[1], (offset[2] + z) * grid.cellSize + grid.min[2]).project(state.camera).add(new THREE.Vector3(1, 1, 0)).multiply(new THREE.Vector3(0.5 * window.innerWidth, 0.5 * window.innerHeight, 1));
+	
+	          var label = document.createElement('span');
+	
+	          var text = document.createTextNode(indices.map(function (num) {
+	            return readBuffer[idx * 4 + num];
+	          }).join(", "));
+	          label.appendChild(text);
+	          label.style.position = 'absolute';
+	          label.style.left = pos.x;
+	          label.style.top = window.innerHeight - pos.y;
+	          // label.style.backgroundColor = "#333"
+	          label.style.color = "#ddd";
+	          label.style.padding = "1px 3px";
+	          label.style.fontSize = "10px";
+	          label.style.userSelect = "none";
+	          label.style.zIndex = '' + Math.floor(1000 - 1000 * pos.z);
+	          label.className = 'grid-label';
+	          document.body.appendChild(label);
+	        };
+	
+	        for (var idx = 0; idx < readBuffer.length / 4; ++idx) {
+	          var _ret = _loop(idx);
+	
+	          if (_ret === 'continue') continue;
+	        }
+	        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	      }
+	
 	      var painter = {
+	        debugValues: false,
 	        drawTypes: false,
+	        drawA: false,
+	        drawDiv: false,
+	        drawp: false,
+	        drawr: false,
+	        drawz: false,
+	        draws: false,
+	        drawMIC: false,
 	        drawX: false,
 	        drawY: false,
 	        drawZ: false,
@@ -51262,23 +51624,86 @@
 	      };
 	
 	      function draw(state) {
-	        if (painter.drawTypes) {
+	        var els = document.getElementsByClassName('grid-label');
+	        while (els[0]) {
+	          els[0].parentNode.removeChild(els[0]);
+	        }
+	
+	        if (painter.drawTypes || painter.drawA || painter.drawMIC || painter.drawp || painter.drawDiv || painter.drawr || painter.drawz || painter.draws) {
 	          gl.enable(gl.BLEND);
 	          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 	
 	          gl.useProgram(progcube);
 	
-	          gl.activeTexture(gl.TEXTURE0);
-	          gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
 	          gl.uniform1i(u_grid2, 0);
 	          gl.uniform1i(u_texLength2, grid.textureLength);
 	          gl.uniform3fv(u_min2, grid.min);
 	          gl.uniform3i(u_count2, grid.count[0], grid.count[1], grid.count[2]);
 	          gl.uniform1f(u_cellSize2, grid.cellSize);
-	
 	          gl.uniformMatrix4fv(u_viewProj2, false, state.cameraMat.elements);
 	
-	          drawTypes();
+	          gl.activeTexture(gl.TEXTURE0);
+	          if (painter.drawTypes) {
+	            gl.uniform1i(u_mode, 0);
+	            gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
+	
+	            drawTypes();
+	            if (painter.debugValues) addLabels(grid.T.fbo, [0.5, 0.5, 0.5], state, [0]);
+	          }
+	          if (painter.drawA) {
+	            gl.uniform1i(u_mode, 1);
+	            gl.bindTexture(gl.TEXTURE_2D, grid.P.tex);
+	
+	            drawTypes();
+	            if (painter.debugValues) addLabels(grid.P.fbo, [0.5, 0.5, 0.5], state, [0, 1, 2, 3]);
+	          }
+	          if (painter.drawp) {
+	            gl.uniform1i(u_mode, 2);
+	            gl.uniform1i(u_c, 0);
+	            gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex);
+	
+	            drawTypes();
+	            if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state, [0]);
+	          }
+	          if (painter.drawDiv) {
+	            gl.uniform1i(u_mode, 2);
+	            gl.uniform1i(u_c, 1);
+	            gl.bindTexture(gl.TEXTURE_2D, grid.div.tex);
+	
+	            drawTypes();
+	            if (painter.debugValues) addLabels(grid.div.fbo, [0.5, 0.5, 0.5], state, [1]);
+	          }
+	          if (painter.drawr) {
+	            gl.uniform1i(u_mode, 2);
+	            gl.uniform1i(u_c, 1);
+	            gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex);
+	
+	            drawTypes();
+	            if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state, [1]);
+	          }
+	          if (painter.drawz) {
+	            gl.uniform1i(u_mode, 2);
+	            gl.uniform1i(u_c, 2);
+	            gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex);
+	
+	            drawTypes();
+	            if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state, [2]);
+	          }
+	          if (painter.draws) {
+	            gl.uniform1i(u_mode, 2);
+	            gl.uniform1i(u_c, 3);
+	            gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex);
+	
+	            drawTypes();
+	            if (painter.debugValues) addLabels(grid.PCG1.fbo, [0.5, 0.5, 0.5], state, [3]);
+	          }
+	          if (painter.drawMIC) {
+	            gl.uniform1i(u_mode, 1);
+	            gl.bindTexture(gl.TEXTURE_2D, grid.MIC1.tex);
+	
+	            drawTypes();
+	            if (painter.debugValues) addLabels(grid.MIC1.fbo, [0.5, 0.5, 0.5], state, [0]);
+	          }
 	        }
 	
 	        if (painter.drawX || painter.drawY || painter.drawZ) {
@@ -51306,6 +51731,12 @@
 	        if (painter.drawX || painter.drawY || painter.drawZ) {
 	          gl.disableVertexAttribArray(v_id);
 	          gl.disable(gl.BLEND);
+	
+	          if (painter.debugValues) {
+	            if (painter.drawX) addLabels(grid.A.fbo, [0.0, 0.5, 0.5], state, [0]);
+	            if (painter.drawY) addLabels(grid.A.fbo, [0.5, 0.0, 0.5], state, [1]);
+	            if (painter.drawZ) addLabels(grid.A.fbo, [0.5, 0.5, 0.0], state, [2]);
+	          }
 	        }
 	      }
 	
@@ -51324,7 +51755,7 @@
 	exports.default = Painters;
 
 /***/ },
-/* 23 */
+/* 24 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -51363,675 +51794,1607 @@
 	};
 
 /***/ },
-/* 24 */
-/***/ function(module, exports) {
-
-	module.exports = "\nuniform mat4 u_viewProj;\n\nattribute float v_id;\nuniform sampler2D u_particles;\nuniform int u_texLength;\n\nvarying vec3 f_col;\n\nvoid main() {\n    int pIdx = int(v_id) * 2;\n    int vIdx = int(v_id) * 2 + 1;\n\n    int pV = pIdx / u_texLength;\n    int pU = pIdx - pV * u_texLength;\n\n    int vV = vIdx / u_texLength;\n    int vU = vIdx - vV * u_texLength;\n\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_texLength);\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_texLength);\n\n    vec3 v_pos = texture2D(u_particles, pUV).rgb;\n    vec3 v_vel = texture2D(u_particles, vUV).rgb;\n\n    f_col = clamp(vec3(0,0,1) + vec3(length(v_vel) / 0.2), vec3(0,0,0), vec3(1,1,1));\n    gl_Position = u_viewProj * vec4(v_pos, 1.0);\n    gl_PointSize = 3.0;\n}"
-
-/***/ },
 /* 25 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nvarying vec3 f_col;\n\nvoid main() {\n  gl_FragColor = vec4(f_col, 1.0);\n}"
+	module.exports = "\r\nuniform mat4 u_viewProj;\r\n\r\nattribute float v_id;\r\nuniform sampler2D u_particles;\r\nuniform int u_texLength;\r\n\r\nvarying vec3 f_col;\r\n\r\nvoid main() {\r\n    int pIdx = int(v_id) * 2;\r\n    int vIdx = int(v_id) * 2 + 1;\r\n\r\n    int pV = pIdx / u_texLength;\r\n    int pU = pIdx - pV * u_texLength;\r\n\r\n    int vV = vIdx / u_texLength;\r\n    int vU = vIdx - vV * u_texLength;\r\n\r\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_texLength);\r\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_texLength);\r\n\r\n    vec3 v_pos = texture2D(u_particles, pUV).rgb;\r\n    vec3 v_vel = texture2D(u_particles, vUV).rgb;\r\n\r\n    f_col = clamp(vec3(0,0,1) + vec3(length(v_vel) / 2.0), vec3(0,0,0), vec3(1,1,1));\r\n    gl_Position = u_viewProj * vec4(v_pos, 1.0);\r\n    gl_PointSize = 3.0;\r\n}"
 
 /***/ },
 /* 26 */
 /***/ function(module, exports) {
 
-	module.exports = "\nuniform sampler2D u_grid;\nuniform ivec3 u_count;\nuniform vec3 u_min;\nuniform float u_cellSize;\nuniform mat4 u_viewProj;\nuniform int u_texLength;\n\nattribute float v_id;\n\nvarying vec4 f_col;\n\nivec3 toXYZ(int idx, ivec3 count) {\n    int z = idx / (count.x * count.y);\n    int y = (idx - z * (count.x * count.y)) / count.x;\n    int x = idx - y * count.x - z * (count.x * count.y);\n\n    return ivec3(x,y,z);\n}\n\nint toFlat(ivec3 idx, ivec3 count) {\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\n}\n\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\n    int idx = pIdx.x + pIdx.y * texLength;\n    return toXYZ(idx, count);\n}\n\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    return texture2D(grid, gUV);\n}\n\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    for (int i = 0; i < 4; ++i) {\n        if (i == c) return texture2D(grid, gUV)[i];\n    }\n    return 0.0;\n}\n\nbool checkIdx(ivec3 idx, ivec3 count) {\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\n}\n\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\n    return (pos - min) / cellSize;\n}\n\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\n}\n\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\n    return vec3(idx)*cellSize + min;\n}\n\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\n\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\n\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nvoid main() {\n\n  ivec3 idx = toXYZ(int(v_id), u_count);\n\n  vec3 pos = positionOf(idx, u_min, u_cellSize) + vec3(0.5,0.5,0.5) * u_cellSize;\n\n  vec4 val = gridAt(u_grid, idx, u_count, u_texLength);\n\n  float v2 = val.r - 4.0 * floor(val.r / 4.0);\n  float v1 = v2 - 2.0 * floor(v2 / 2.0);\n\n  f_col = vec4(\n    v1 >= 1.0,\n    v2 >= 2.0,\n    val.r >= 4.0,\n    0.5);\n\n  gl_Position = u_viewProj * vec4(pos, 1.0);\n\n  gl_PointSize = 3.0;\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nvarying vec3 f_col;\r\n\r\nvoid main() {\r\n  gl_FragColor = vec4(f_col, 1.0);\r\n}"
 
 /***/ },
 /* 27 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nvarying vec4 f_col;\n\nvoid main() {\n  gl_FragColor = f_col;\n}"
+	module.exports = "\r\nuniform sampler2D u_grid;\r\nuniform ivec3 u_count;\r\nuniform vec3 u_min;\r\nuniform float u_cellSize;\r\nuniform mat4 u_viewProj;\r\nuniform int u_texLength;\r\nuniform int u_mode;\r\nuniform int u_c;\r\n\r\nattribute float v_id;\r\n\r\nvarying vec4 f_col;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n\r\n  ivec3 idx = toXYZ(int(v_id), u_count);\r\n\r\n  vec3 pos = positionOf(idx, u_min, u_cellSize) + vec3(0.5,0.5,0.5) * u_cellSize;\r\n\r\n  vec4 val = gridAt(u_grid, idx, u_count, u_texLength);\r\n\r\n  if (u_mode == 0) {\r\n    float v2 = val.r - 4.0 * floor(val.r / 4.0);\r\n    float v1 = v2 - 2.0 * floor(v2 / 2.0);\r\n\r\n    f_col = vec4(\r\n    max(float(v1 >= 1.0), 0.1),\r\n    max(float(v2 >= 2.0), 0.1),\r\n    max(float(val.r >= 4.0), 0.1),\r\n    0.2);\r\n  } else if (u_mode == 1) {\r\n    f_col = 10.0*vec4(vec3(abs(val)), 0.2);\r\n  } else if (u_mode == 2) {\r\n    for (int i = 0; i < 3; ++i) {\r\n      if (i == u_c) {\r\n        f_col = vec4(vec3(abs(val[i])), 0.2);   \r\n        break;\r\n      }\r\n    }\r\n  }\r\n\r\n  vec4 p = u_viewProj * vec4(pos, 1.0);\r\n  p /= p[3];\r\n  gl_Position = p;\r\n\r\n  gl_PointSize = 10.0;\r\n\r\n  if (!checkIdx(idx, u_count - 1)) {\r\n    gl_PointSize = 0.0;\r\n    gl_Position = vec4(100,100,0.0,1.0);\r\n  }\r\n}"
 
 /***/ },
 /* 28 */
 /***/ function(module, exports) {
 
-	module.exports = "\nuniform sampler2D u_grid;\nuniform vec3 u_direction;\nuniform vec3 u_min;\nuniform ivec3 u_count;\nuniform float u_cellSize;\nuniform mat4 u_viewProj;\nuniform int u_texLength;\nuniform int u_g;\n\nattribute float v_id;\n\nvarying vec3 f_col;\n\nivec3 toXYZ(int idx, ivec3 count) {\n    int z = idx / (count.x * count.y);\n    int y = (idx - z * (count.x * count.y)) / count.x;\n    int x = idx - y * count.x - z * (count.x * count.y);\n\n    return ivec3(x,y,z);\n}\n\nint toFlat(ivec3 idx, ivec3 count) {\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\n}\n\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\n    int idx = pIdx.x + pIdx.y * texLength;\n    return toXYZ(idx, count);\n}\n\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    return texture2D(grid, gUV);\n}\n\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    for (int i = 0; i < 4; ++i) {\n        if (i == c) return texture2D(grid, gUV)[i];\n    }\n    return 0.0;\n}\n\nbool checkIdx(ivec3 idx, ivec3 count) {\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\n}\n\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\n    return (pos - min) / cellSize;\n}\n\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\n}\n\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\n    return vec3(idx)*cellSize + min;\n}\n\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\n\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\n\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nvoid main() {\n\n  int idx = int(v_id / 2.0);\n\n  vec3 pos;\n\n  if (u_g == 0) {\n    ivec3 xyz = toXYZ(idx, u_count);\n    pos = positionOf(xyz, u_min, u_cellSize) + vec3(0,0.5,0.5) * u_cellSize;\n\n    if (v_id / 2.0 > floor(v_id / 2.0)) {\n      pos += 1.0 * vec3(1,0,0) * gridComponentAt(u_grid, xyz, u_count, u_texLength, 0);\n    }\n  } else if (u_g == 1) {\n    ivec3 xyz = toXYZ(idx, u_count);\n    pos = positionOf(xyz, u_min, u_cellSize) + vec3(0.5,0,0.5) * u_cellSize;\n\n    if (v_id / 2.0 > floor(v_id / 2.0)) {\n      pos += 1.0 * vec3(0,1,0) * gridComponentAt(u_grid, xyz, u_count, u_texLength, 1);\n    }\n  } else if (u_g == 2) {\n    ivec3 xyz = toXYZ(idx, u_count);\n    pos = positionOf(xyz, u_min, u_cellSize) + vec3(0.5,0.5,0) * u_cellSize;\n\n    if (v_id / 2.0 > floor(v_id / 2.0)) {\n      pos += 1.0 * vec3(0,0,1) * gridComponentAt(u_grid, xyz, u_count, u_texLength, 2);\n    }\n  }\n\n  f_col = u_direction;\n\n  gl_Position = u_viewProj * vec4(pos, 1.0);\n\n  gl_PointSize = 1.0;\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nvarying vec4 f_col;\r\n\r\nvoid main() {\r\n  gl_FragColor = f_col;\r\n}"
 
 /***/ },
 /* 29 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nvarying vec3 f_col;\n\nvoid main() {\n  gl_FragColor = vec4(f_col, 1.0);\n}"
+	module.exports = "\r\nuniform sampler2D u_grid;\r\nuniform vec3 u_direction;\r\nuniform vec3 u_min;\r\nuniform ivec3 u_count;\r\nuniform float u_cellSize;\r\nuniform mat4 u_viewProj;\r\nuniform int u_texLength;\r\nuniform int u_g;\r\n\r\nattribute float v_id;\r\n\r\nvarying vec3 f_col;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n\r\n  int idx = int(v_id / 2.0);\r\n\r\n  vec3 pos;\r\n\r\n  float scale = 0.2;\r\n  if (u_g == 0) {\r\n    ivec3 xyz = toXYZ(idx, u_count);\r\n    pos = positionOf(xyz, u_min, u_cellSize) + vec3(0,0.5,0.5) * u_cellSize;\r\n\r\n    if (v_id / 2.0 > floor(v_id / 2.0)) {\r\n      pos += scale * vec3(1,0,0) * gridComponentAt(u_grid, xyz, u_count, u_texLength, 0);\r\n    }\r\n  } else if (u_g == 1) {\r\n    ivec3 xyz = toXYZ(idx, u_count);\r\n    pos = positionOf(xyz, u_min, u_cellSize) + vec3(0.5,0,0.5) * u_cellSize;\r\n\r\n    if (v_id / 2.0 > floor(v_id / 2.0)) {\r\n      pos += scale * vec3(0,1,0) * gridComponentAt(u_grid, xyz, u_count, u_texLength, 1);\r\n    }\r\n  } else if (u_g == 2) {\r\n    ivec3 xyz = toXYZ(idx, u_count);\r\n    pos = positionOf(xyz, u_min, u_cellSize) + vec3(0.5,0.5,0) * u_cellSize;\r\n\r\n    if (v_id / 2.0 > floor(v_id / 2.0)) {\r\n      pos += scale * vec3(0,0,1) * gridComponentAt(u_grid, xyz, u_count, u_texLength, 2);\r\n    }\r\n  }\r\n\r\n  f_col = u_direction;\r\n\r\n  vec4 p = u_viewProj * vec4(pos, 1.0);\r\n  p /= p[3];\r\n  gl_Position = p;\r\n\r\n  gl_PointSize = 1.0;\r\n}"
 
 /***/ },
 /* 30 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nprecision highp float;\r\n\r\nvarying vec3 f_col;\r\n\r\nvoid main() {\r\n  gl_FragColor = vec4(f_col, 1.0);\r\n}"
+
+/***/ },
+/* 31 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 	
 	Object.defineProperty(exports, "__esModule", {
-	    value: true
+	                value: true
 	});
 	
 	exports.default = function (gl) {
-	    var _require = __webpack_require__(23)(gl),
-	        getShader = _require.getShader,
-	        addShaders = _require.addShaders;
+	                var _require = __webpack_require__(24)(gl),
+	                    getShader = _require.getShader,
+	                    addShaders = _require.addShaders;
 	
-	    var quad_vbo = function () {
-	        var buffer = gl.createBuffer();
-	        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-	        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0]), gl.STATIC_DRAW);
-	        return buffer;
-	    }();
+	                var quad_vbo = function () {
+	                                var buffer = gl.createBuffer();
+	                                gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+	                                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0]), gl.STATIC_DRAW);
+	                                return buffer;
+	                }();
 	
-	    function Sim(grid, particles) {
+	                function Sim(grid, particles, solverSteps) {
 	
-	        var clearGridVelocity = function () {
-	            var prog = gl.createProgram();
+	                                var clearGridVelocity = function () {
+	                                                var prog = gl.createProgram();
 	
-	            var vs = getShader(__webpack_require__(31), gl.VERTEX_SHADER);
-	            var fs = getShader(__webpack_require__(32), gl.FRAGMENT_SHADER);
-	            addShaders(prog, [vs, fs]);
+	                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                var fs = getShader(__webpack_require__(33), gl.FRAGMENT_SHADER);
+	                                                addShaders(prog, [vs, fs]);
 	
-	            var v_pos = gl.getAttribLocation(prog, "v_pos");
+	                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
 	
-	            return function () {
-	                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	                                                return function () {
+	                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
 	
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.A.fbo);
-	                gl.clear(gl.COLOR_BUFFER_BIT);
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.A.fbo);
+	                                                                gl.clear(gl.COLOR_BUFFER_BIT);
 	
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
-	                gl.clear(gl.COLOR_BUFFER_BIT);
-	            };
-	        }();
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
+	                                                                gl.clear(gl.COLOR_BUFFER_BIT);
+	                                                };
+	                                }();
 	
-	        var projectToGrid = function () {
-	            var prog = gl.createProgram();
+	                                var projectToGrid = function () {
+	                                                var prog = gl.createProgram();
 	
-	            var vs = getShader(__webpack_require__(33), gl.VERTEX_SHADER);
-	            var fs = getShader(__webpack_require__(34), gl.FRAGMENT_SHADER);
-	            addShaders(prog, [vs, fs]);
+	                                                var vs = getShader(__webpack_require__(34), gl.VERTEX_SHADER);
+	                                                var fs = getShader(__webpack_require__(35), gl.FRAGMENT_SHADER);
+	                                                addShaders(prog, [vs, fs]);
 	
-	            var u_min = gl.getUniformLocation(prog, "u_min");
-	            var u_offset = gl.getUniformLocation(prog, "u_offset");
-	            var u_count = gl.getUniformLocation(prog, "u_count");
-	            var u_goffset = gl.getUniformLocation(prog, "u_goffset");
-	            var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
-	            var u_texLength = gl.getUniformLocation(prog, "u_texLength");
-	            var u_g = gl.getUniformLocation(prog, "u_g");
+	                                                var u_min = gl.getUniformLocation(prog, "u_min");
+	                                                var u_offset = gl.getUniformLocation(prog, "u_offset");
+	                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	                                                var u_goffset = gl.getUniformLocation(prog, "u_goffset");
+	                                                var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
+	                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                var u_g = gl.getUniformLocation(prog, "u_g");
 	
-	            var v_id = gl.getAttribLocation(prog, "v_id");
-	            var u_particles = gl.getUniformLocation(prog, "u_particles");
-	            var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
+	                                                var v_id = gl.getAttribLocation(prog, "v_id");
+	                                                var u_particles = gl.getUniformLocation(prog, "u_particles");
+	                                                var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
 	
-	            var progAvg = gl.createProgram();
+	                                                var progAvg = gl.createProgram();
 	
-	            var vsAvg = getShader(__webpack_require__(31), gl.VERTEX_SHADER);
-	            var fsAvg = getShader(__webpack_require__(35), gl.FRAGMENT_SHADER);
-	            addShaders(progAvg, [vsAvg, fsAvg]);
+	                                                var vsAvg = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                var fsAvg = getShader(__webpack_require__(36), gl.FRAGMENT_SHADER);
+	                                                addShaders(progAvg, [vsAvg, fsAvg]);
 	
-	            var v_pos = gl.getAttribLocation(progAvg, "v_pos");
-	            var gU_old = gl.getUniformLocation(progAvg, "gU_old");
+	                                                var v_pos = gl.getAttribLocation(progAvg, "v_pos");
+	                                                var gU_old = gl.getUniformLocation(progAvg, "gU_old");
 	
-	            return function () {
-	                gl.useProgram(prog);
+	                                                return function () {
+	                                                                gl.useProgram(prog);
 	
-	                gl.activeTexture(gl.TEXTURE0);
-	                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
-	                gl.uniform1i(u_particles, 0);
+	                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
+	                                                                gl.uniform1i(u_particles, 0);
 	
-	                gl.uniform1i(u_particleTexLength, particles.textureLength);
+	                                                                gl.uniform1i(u_particleTexLength, particles.textureLength);
 	
-	                gl.uniform3fv(u_min, grid.min);
-	                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
-	                gl.uniform1f(u_cellSize, grid.cellSize);
-	                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                gl.uniform3fv(u_min, grid.min);
+	                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	                                                                gl.uniform1f(u_cellSize, grid.cellSize);
+	                                                                gl.uniform1i(u_texLength, grid.textureLength);
 	
-	                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
-	                gl.enableVertexAttribArray(v_id);
-	                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
+	                                                                gl.enableVertexAttribArray(v_id);
+	                                                                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
 	
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
-	                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
+	                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
 	
-	                for (var g = 0; g < 3; ++g) {
-	                    gl.uniform1i(u_g, g);
-	                    var r = 1;
-	                    for (var i = -r; i <= r; ++i) {
-	                        for (var j = -r; j <= r; ++j) {
-	                            for (var k = -r; k <= r; ++k) {
-	                                gl.uniform3i(u_goffset, i, j, k);
-	                                gl.drawArrays(gl.POINTS, 0, particles.length);
-	                            }
-	                        }
-	                    }
+	                                                                for (var g = 0; g < 3; ++g) {
+	                                                                                gl.uniform1i(u_g, g);
+	                                                                                var r = 1;
+	                                                                                for (var i = -r; i <= r; ++i) {
+	                                                                                                for (var j = -r; j <= r; ++j) {
+	                                                                                                                for (var k = -r; k <= r; ++k) {
+	                                                                                                                                gl.uniform3i(u_goffset, i, j, k);
+	                                                                                                                                gl.drawArrays(gl.POINTS, 0, particles.length);
+	                                                                                                                }
+	                                                                                                }
+	                                                                                }
+	                                                                }
+	
+	                                                                gl.disableVertexAttribArray(v_id);
+	
+	                                                                grid.swap();
+	
+	                                                                gl.useProgram(progAvg);
+	
+	                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
+	                                                                gl.uniform1i(gU_old, 0);
+	
+	                                                                gl.enableVertexAttribArray(v_pos);
+	
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	
+	                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
+	                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	
+	                                                                gl.disableVertexAttribArray(v_pos);
+	
+	                                                                grid.swap();
+	                                                };
+	                                }();
+	
+	                                var copyGrid = function () {
+	                                                var prog = gl.createProgram();
+	
+	                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                var fs = getShader(__webpack_require__(37), gl.FRAGMENT_SHADER);
+	                                                addShaders(prog, [vs, fs]);
+	
+	                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
+	                                                var u_grid = gl.getUniformLocation(prog, "u_grid");
+	
+	                                                return function () {
+	                                                                gl.useProgram(prog);
+	
+	                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
+	                                                                gl.uniform1i(u_grid, 0);
+	
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.old.fbo);
+	                                                                gl.clear(gl.COLOR_BUFFER_BIT);
+	                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	                                                                gl.disableVertexAttribArray(v_pos);
+	                                                };
+	                                }();
+	
+	                                var gravityUpdate = function () {
+	                                                var prog = gl.createProgram();
+	
+	                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                var fs = getShader(__webpack_require__(38), gl.FRAGMENT_SHADER);
+	                                                addShaders(prog, [vs, fs]);
+	
+	                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
+	                                                var gU_old = gl.getUniformLocation(prog, "gU_old");
+	                                                var u_t = gl.getUniformLocation(prog, "u_t");
+	
+	                                                var u_types = gl.getUniformLocation(prog, "u_types");
+	                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	
+	                                                return function (t) {
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
+	                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	
+	                                                                gl.useProgram(prog);
+	
+	                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
+	                                                                gl.uniform1i(gU_old, 0);
+	                                                                gl.uniform1f(u_t, t);
+	
+	                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
+	                                                                gl.uniform1i(u_types, 1);
+	
+	                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	
+	                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	
+	                                                                gl.disableVertexAttribArray(v_pos);
+	
+	                                                                grid.swap();
+	                                                };
+	                                }();
+	
+	                                var markCells = function () {
+	                                                var prog = gl.createProgram();
+	
+	                                                var vs = getShader(__webpack_require__(39), gl.VERTEX_SHADER);
+	                                                var fs = getShader(__webpack_require__(40), gl.FRAGMENT_SHADER);
+	                                                addShaders(prog, [vs, fs]);
+	
+	                                                var u_min = gl.getUniformLocation(prog, "u_min");
+	                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	                                                var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
+	                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	
+	                                                var u_particles = gl.getUniformLocation(prog, "u_particles");
+	                                                var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
+	
+	                                                var v_id = gl.getAttribLocation(prog, "v_id");
+	
+	                                                var prog2 = gl.createProgram();
+	
+	                                                var vs2 = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                var fs2 = getShader(__webpack_require__(41), gl.FRAGMENT_SHADER);
+	                                                addShaders(prog2, [vs2, fs2]);
+	
+	                                                var v_pos = gl.getAttribLocation(prog2, "v_pos");
+	                                                var u_texLength2 = gl.getUniformLocation(prog2, "u_texLength");
+	                                                var u_count2 = gl.getUniformLocation(prog2, "u_count");
+	                                                var u_cellSize2 = gl.getUniformLocation(prog2, "u_cellSize");
+	
+	                                                var pointCount = 7 * particles.length;
+	                                                var pointBuffer = gl.createBuffer();
+	                                                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+	                                                var data = new Float32Array(pointCount);
+	                                                for (var i = 0; i < pointCount; ++i) {
+	                                                                data[i] = i;
+	                                                }
+	                                                gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+	                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	
+	                                                return function () {
+	                                                                gl.useProgram(prog);
+	
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.T.fbo);
+	                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	                                                                gl.clear(gl.COLOR_BUFFER_BIT);
+	
+	                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
+	                                                                gl.uniform1i(u_particles, 0);
+	
+	                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                gl.uniform1i(u_particleTexLength, particles.textureLength);
+	                                                                gl.uniform1f(u_cellSize, grid.cellSize);
+	                                                                gl.uniform3fv(u_min, grid.min);
+	                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+	                                                                gl.enableVertexAttribArray(v_id);
+	                                                                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	
+	                                                                gl.drawArrays(gl.POINTS, 0, pointCount);
+	
+	                                                                gl.disableVertexAttribArray(v_id);
+	
+	                                                                gl.useProgram(prog2);
+	
+	                                                                gl.uniform1i(u_texLength2, grid.textureLength);
+	                                                                gl.uniform3i(u_count2, grid.count[0], grid.count[1], grid.count[2]);
+	                                                                gl.uniform1f(u_cellSize2, grid.cellSize);
+	
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	
+	                                                                gl.disableVertexAttribArray(v_pos);
+	                                                };
+	                                }();
+	
+	                                var enforceBoundary = function () {
+	                                                var prog = gl.createProgram();
+	
+	                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                var fs = getShader(__webpack_require__(42), gl.FRAGMENT_SHADER);
+	                                                addShaders(prog, [vs, fs]);
+	
+	                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
+	                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                var u_min = gl.getUniformLocation(prog, "u_min");
+	                                                var u_max = gl.getUniformLocation(prog, "u_max");
+	                                                var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
+	                                                var u_grid = gl.getUniformLocation(prog, "u_grid");
+	                                                var u_types = gl.getUniformLocation(prog, "u_types");
+	                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	
+	                                                return function () {
+	                                                                gl.useProgram(prog);
+	
+	                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
+	                                                                gl.uniform1i(u_grid, 0);
+	
+	                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
+	                                                                gl.uniform1i(u_types, 1);
+	
+	                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                gl.uniform3fv(u_min, grid.min);
+	                                                                gl.uniform3fv(u_max, grid.max);
+	                                                                gl.uniform1f(u_cellSize, grid.cellSize);
+	                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
+	                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	
+	                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	
+	                                                                gl.disableVertexAttribArray(v_pos);
+	
+	                                                                grid.swap();
+	                                                };
+	                                }();
+	
+	                                var pressureSolve = function () {
+	
+	                                                var tempTex = {
+	                                                                tex: gl.createTexture(),
+	                                                                fbo: gl.createFramebuffer()
+	                                                };
+	
+	                                                var tempTex2 = {
+	                                                                tex: gl.createTexture(),
+	                                                                fbo: gl.createFramebuffer()
+	                                                };
+	
+	                                                gl.bindTexture(gl.TEXTURE_2D, tempTex.tex);
+	                                                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.FLOAT, null);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                                                gl.bindTexture(gl.TEXTURE_2D, null);
+	                                                gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo);
+	                                                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempTex.tex, 0);
+	                                                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                                                gl.bindTexture(gl.TEXTURE_2D, tempTex2.tex);
+	                                                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.FLOAT, null);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                                                gl.bindTexture(gl.TEXTURE_2D, null);
+	                                                gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex2.fbo);
+	                                                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempTex2.tex, 0);
+	                                                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                                                var q1 = {
+	                                                                tex: gl.createTexture(),
+	                                                                fbo: gl.createFramebuffer()
+	                                                };
+	
+	                                                var q2 = {
+	                                                                tex: gl.createTexture(),
+	                                                                fbo: gl.createFramebuffer()
+	                                                };
+	
+	                                                gl.bindTexture(gl.TEXTURE_2D, q1.tex);
+	                                                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                                                gl.bindTexture(gl.TEXTURE_2D, null);
+	                                                gl.bindFramebuffer(gl.FRAMEBUFFER, q1.fbo);
+	                                                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, q1.tex, 0);
+	                                                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                                                gl.bindTexture(gl.TEXTURE_2D, q2.tex);
+	                                                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                                                gl.bindTexture(gl.TEXTURE_2D, null);
+	                                                gl.bindFramebuffer(gl.FRAMEBUFFER, q2.fbo);
+	                                                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, q2.tex, 0);
+	                                                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                                                var alpha;
+	                                                var beta;
+	
+	                                                var clearMatrices = function () {
+	                                                                return function () {
+	                                                                                gl.clearColor(0, 0, 0, 0);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.P.fbo);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.div.fbo);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.MIC1.fbo);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.MIC2.fbo);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG2.fbo);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex2.fbo);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, q1.fbo);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, q2.fbo);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	                                                                };
+	                                                }();
+	
+	                                                // var buildA = (function() {
+	                                                //     var prog = gl.createProgram()
+	
+	                                                //     var vs = getShader(require('./shaders/quad-vert.glsl'), gl.VERTEX_SHADER);
+	                                                //     var fs = getShader(require('./shaders/buildA-frag.glsl'), gl.FRAGMENT_SHADER);
+	                                                //     addShaders(prog, [vs, fs]);
+	
+	                                                //     var u_count = gl.getUniformLocation(prog, "u_count")
+	                                                //     var u_types = gl.getUniformLocation(prog, "u_types")
+	                                                //     var u_texLength = gl.getUniformLocation(prog, "u_texLength")
+	
+	                                                //     var v_pos = gl.getAttribLocation(prog, "v_pos")
+	
+	                                                //     return function() {
+	                                                //         gl.useProgram(prog)
+	
+	                                                //         gl.activeTexture(gl.TEXTURE0)
+	                                                //         gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
+	                                                //         gl.uniform1i(u_types, 0)
+	                                                //         gl.uniform1i(u_texLength, grid.textureLength)
+	                                                //         gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
+	
+	                                                //         gl.bindFramebuffer(gl.FRAMEBUFFER, grid.P.fbo)
+	                                                //         gl.clearColor(0,0,0,0)
+	                                                //         gl.clear(gl.COLOR_BUFFER_BIT)
+	                                                //         gl.viewport(0, 0, grid.textureLength, grid.textureLength)
+	                                                //     }
+	                                                // })()
+	
+	                                                var setupA = function () {
+	                                                                var prog = gl.createProgram();
+	
+	                                                                var vs = getShader(__webpack_require__(43), gl.VERTEX_SHADER);
+	                                                                var fs = getShader(__webpack_require__(44), gl.FRAGMENT_SHADER);
+	                                                                addShaders(prog, [vs, fs]);
+	
+	                                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	                                                                var u_types = gl.getUniformLocation(prog, "u_types");
+	                                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                                var u_scale = gl.getUniformLocation(prog, "u_scale");
+	                                                                var v_id = gl.getAttribLocation(prog, "v_id");
+	
+	                                                                var pointCount = 6 * grid.count[0] * grid.count[1] * grid.count[2];
+	                                                                var pointBuffer = gl.createBuffer();
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+	                                                                var data = new Float32Array(pointCount);
+	                                                                for (var i = 0; i < pointCount; ++i) {
+	                                                                                data[i] = i;
+	                                                                }
+	                                                                gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	
+	                                                                return function (t) {
+	                                                                                gl.useProgram(prog);
+	
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
+	                                                                                gl.uniform1i(u_types, 0);
+	                                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	                                                                                // gl.uniform1f(u_scale, 1.0 / (1*grid.cellSize*grid.cellSize))
+	                                                                                gl.uniform1f(u_scale, 1.0);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.P.fbo);
+	                                                                                gl.clearColor(0, 0, 0, 0);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT);
+	                                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	
+	                                                                                gl.enable(gl.BLEND);
+	                                                                                gl.blendFunc(gl.ONE, gl.ONE);
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+	                                                                                gl.enableVertexAttribArray(v_id);
+	                                                                                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	                                                                                gl.drawArrays(gl.POINTS, 0, pointCount);
+	                                                                                gl.disableVertexAttribArray(v_id);
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	                                                                                gl.disable(gl.BLEND);
+	                                                                };
+	                                                }();
+	
+	                                                var setupb = function () {
+	                                                                var prog = gl.createProgram();
+	
+	                                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                                var fs = getShader(__webpack_require__(45), gl.FRAGMENT_SHADER);
+	                                                                addShaders(prog, [vs, fs]);
+	
+	                                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
+	                                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	                                                                var u_types = gl.getUniformLocation(prog, "u_types");
+	                                                                var u_A = gl.getUniformLocation(prog, "u_A");
+	                                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                                var u_scale = gl.getUniformLocation(prog, "u_scale");
+	
+	                                                                return function () {
+	                                                                                gl.useProgram(prog);
+	
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
+	                                                                                gl.uniform1i(u_types, 0);
+	                                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
+	                                                                                gl.uniform1i(u_A, 1);
+	                                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	                                                                                gl.uniform1f(u_scale, 1.0 / grid.cellSize);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo);
+	                                                                                gl.clearColor(0, 0, 0, 0);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT);
+	                                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	
+	                                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	                                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.div.fbo);
+	
+	                                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	
+	                                                                                gl.disableVertexAttribArray(v_pos);
+	                                                                };
+	                                                }();
+	
+	                                                var precondition = function () {
+	                                                                var prog = gl.createProgram();
+	                                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                                var fs = getShader(__webpack_require__(46), gl.FRAGMENT_SHADER);
+	                                                                addShaders(prog, [vs, fs]);
+	
+	                                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
+	                                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	                                                                var u_A = gl.getUniformLocation(prog, "u_A");
+	                                                                var u_Pre = gl.getUniformLocation(prog, "u_Pre");
+	                                                                var u_types = gl.getUniformLocation(prog, "u_types");
+	                                                                var u_iter = gl.getUniformLocation(prog, "u_iter");
+	
+	                                                                return function () {
+	                                                                                gl.useProgram(prog);
+	
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.P.tex);
+	                                                                                gl.uniform1i(u_A, 0);
+	                                                                                gl.activeTexture(gl.TEXTURE2);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
+	                                                                                gl.uniform1i(u_types, 2);
+	                                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.MIC1.fbo);
+	                                                                                gl.clearColor(0, 0, 0, 0);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT);
+	                                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	
+	                                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	                                                                                var N = Math.max(Math.max(grid.count[0], grid.count[1]), grid.count[2]);
+	                                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                                gl.uniform1i(u_Pre, 1);
+	                                                                                for (var i = 0; i < N; ++i) {
+	                                                                                                var temp = grid.MIC1;
+	                                                                                                grid.MIC1 = grid.MIC2;
+	                                                                                                grid.MIC2 = temp;
+	
+	                                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.MIC1.fbo);
+	                                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.MIC2.tex);
+	                                                                                                gl.uniform1i(u_iter, i);
+	                                                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	                                                                                }
+	
+	                                                                                gl.disableVertexAttribArray(v_pos);
+	                                                                };
+	                                                }();
+	
+	                                                var preconditionZ = function () {
+	
+	                                                                var prog = gl.createProgram();
+	                                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                                var fs = getShader(__webpack_require__(47), gl.FRAGMENT_SHADER);
+	                                                                addShaders(prog, [vs, fs]);
+	
+	                                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
+	                                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	                                                                var u_A = gl.getUniformLocation(prog, "u_A");
+	                                                                var u_types = gl.getUniformLocation(prog, "u_types");
+	                                                                var u_pre = gl.getUniformLocation(prog, "u_pre");
+	                                                                var u_pcg = gl.getUniformLocation(prog, "u_pcg");
+	                                                                var u_q = gl.getUniformLocation(prog, "u_q");
+	                                                                var u_setS = gl.getUniformLocation(prog, "u_setS");
+	                                                                var u_iter = gl.getUniformLocation(prog, "u_iter");
+	                                                                var u_step = gl.getUniformLocation(prog, "u_step");
+	
+	                                                                return function (setS) {
+	                                                                                gl.useProgram(prog);
+	
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.P.tex);
+	                                                                                gl.uniform1i(u_A, 0);
+	                                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.MIC1.tex);
+	                                                                                gl.uniform1i(u_pre, 1);
+	                                                                                gl.activeTexture(gl.TEXTURE3);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
+	                                                                                gl.uniform1i(u_types, 3);
+	                                                                                gl.uniform1i(u_setS, setS);
+	
+	                                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	
+	                                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	                                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	
+	                                                                                var temp;
+	
+	                                                                                var N = Math.max(Math.max(grid.count[0], grid.count[1]), grid.count[2]);
+	                                                                                gl.activeTexture(gl.TEXTURE2);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex);
+	                                                                                gl.uniform1i(u_pcg, 2);
+	
+	                                                                                gl.disable(gl.DEPTH_TEST);
+	
+	                                                                                gl.uniform1i(u_step, 0);
+	                                                                                gl.activeTexture(gl.TEXTURE4);
+	                                                                                gl.uniform1i(u_q, 4);
+	                                                                                for (var i = 0; i < N; ++i) {
+	                                                                                                temp = q1;
+	                                                                                                q1 = q2;
+	                                                                                                q2 = temp;
+	
+	                                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, q1.fbo);
+	                                                                                                gl.bindTexture(gl.TEXTURE_2D, q2.tex);
+	                                                                                                gl.uniform1i(u_iter, i);
+	                                                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	                                                                                }
+	
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, q1.tex);
+	
+	                                                                                gl.uniform1i(u_step, 1);
+	                                                                                gl.activeTexture(gl.TEXTURE2);
+	                                                                                for (var i = N - 1; i >= 0; --i) {
+	                                                                                                temp = grid.PCG1;
+	                                                                                                grid.PCG1 = grid.PCG2;
+	                                                                                                grid.PCG2 = temp;
+	
+	                                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo);
+	                                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.PCG2.tex);
+	                                                                                                gl.uniform1i(u_iter, i);
+	                                                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	                                                                                }
+	
+	                                                                                gl.disableVertexAttribArray(v_pos);
+	                                                                };
+	                                                }();
+	
+	                                                var computeSigma = function () {
+	                                                                var prog = gl.createProgram();
+	
+	                                                                var vs = getShader(__webpack_require__(48), gl.VERTEX_SHADER);
+	                                                                var fs = getShader(__webpack_require__(44), gl.FRAGMENT_SHADER);
+	                                                                addShaders(prog, [vs, fs]);
+	
+	                                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	                                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                                var u_pcg = gl.getUniformLocation(prog, "u_pcg");
+	                                                                var u_preconditioned = gl.getUniformLocation(prog, "u_preconditioned");
+	
+	                                                                var v_id = gl.getAttribLocation(prog, "v_id");
+	
+	                                                                var pointCount = grid.count[0] * grid.count[1] * grid.count[2];
+	                                                                var pointBuffer = gl.createBuffer();
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+	                                                                var data = new Float32Array(pointCount);
+	                                                                for (var i = 0; i < pointCount; ++i) {
+	                                                                                data[i] = i;
+	                                                                }
+	                                                                gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	
+	                                                                return function (useNew, isPreconditioned) {
+	                                                                                gl.useProgram(prog);
+	
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex);
+	                                                                                gl.uniform1i(u_pcg, 0);
+	                                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	
+	                                                                                gl.uniform1i(u_preconditioned, isPreconditioned);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo);
+	                                                                                gl.enable(gl.SCISSOR_TEST);
+	                                                                                if (useNew) {
+	                                                                                                gl.viewport(0, 1, 1, 1);
+	                                                                                                gl.scissor(0, 1, 1, 1);
+	                                                                                } else {
+	                                                                                                gl.viewport(0, 0, 1, 1);
+	                                                                                                gl.scissor(0, 0, 1, 1);
+	                                                                                }
+	
+	                                                                                gl.clearColor(0, 0, 0, 0);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT);
+	
+	                                                                                gl.enable(gl.BLEND);
+	                                                                                gl.blendFunc(gl.ONE, gl.ONE);
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+	                                                                                gl.enableVertexAttribArray(v_id);
+	                                                                                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	                                                                                gl.drawArrays(gl.POINTS, 0, pointCount);
+	                                                                                gl.disableVertexAttribArray(v_id);
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	                                                                                gl.disable(gl.BLEND);
+	
+	                                                                                gl.disable(gl.SCISSOR_TEST);
+	
+	                                                                                // var buf = new Float32Array(4)
+	                                                                                // gl.readPixels(0,0,1,1, gl.RGBA, gl.FLOAT, buf)
+	                                                                                // console.log('sigma:', buf)
+	                                                                };
+	                                                }();
+	
+	                                                var computeAs = function () {
+	                                                                var prog = gl.createProgram();
+	
+	                                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                                var fs = getShader(__webpack_require__(49), gl.FRAGMENT_SHADER);
+	                                                                addShaders(prog, [vs, fs]);
+	
+	                                                                var u_A = gl.getUniformLocation(prog, "u_A");
+	                                                                var u_types = gl.getUniformLocation(prog, "u_types");
+	                                                                var u_pcg = gl.getUniformLocation(prog, "u_pcg");
+	                                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	                                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                                var u_scale = gl.getUniformLocation(prog, "u_scale");
+	
+	                                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
+	
+	                                                                return function () {
+	                                                                                gl.useProgram(prog);
+	
+	                                                                                var temp = grid.PCG1;
+	                                                                                grid.PCG1 = grid.PCG2;
+	                                                                                grid.PCG2 = temp;
+	
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
+	                                                                                gl.uniform1i(u_types, 0);
+	                                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.PCG2.tex);
+	                                                                                gl.uniform1i(u_pcg, 1);
+	                                                                                gl.activeTexture(gl.TEXTURE2);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.P.tex);
+	                                                                                gl.uniform1i(u_A, 2);
+	
+	                                                                                gl.uniform1f(u_scale, 1 / (grid.cellSize * grid.cellSize));
+	
+	                                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	                                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo);
+	                                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	                                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	                                                                                gl.disableVertexAttribArray(v_pos);
+	                                                                };
+	                                                }();
+	
+	                                                var setZ = function () {
+	
+	                                                                var progClear = gl.createProgram();
+	                                                                var vsClear = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                                var fsClear = getShader(__webpack_require__(50), gl.FRAGMENT_SHADER);
+	                                                                addShaders(progClear, [vsClear, fsClear]);
+	                                                                var u_pcgClear = gl.getUniformLocation(progClear, "u_pcg");
+	                                                                var v_posClear = gl.getAttribLocation(progClear, "v_pos");
+	
+	                                                                var prog = gl.createProgram();
+	
+	                                                                var vs = getShader(__webpack_require__(51), gl.VERTEX_SHADER);
+	                                                                var fs = getShader(__webpack_require__(44), gl.FRAGMENT_SHADER);
+	                                                                addShaders(prog, [vs, fs]);
+	
+	                                                                var u_A = gl.getUniformLocation(prog, "u_A");
+	                                                                var u_pcg = gl.getUniformLocation(prog, "u_pcg");
+	                                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	                                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                                var u_scale = gl.getUniformLocation(prog, "u_scale");
+	
+	                                                                var v_id = gl.getAttribLocation(prog, "v_id");
+	
+	                                                                var pointCount = 7 * grid.count[0] * grid.count[1] * grid.count[2];
+	                                                                var pointBuffer = gl.createBuffer();
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+	                                                                var data = new Float32Array(pointCount);
+	                                                                for (var i = 0; i < pointCount; ++i) {
+	                                                                                data[i] = i;
+	                                                                }
+	                                                                gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	
+	                                                                return function () {
+	                                                                                var temp;
+	
+	                                                                                temp = grid.PCG1;
+	                                                                                grid.PCG1 = grid.PCG2;
+	                                                                                grid.PCG2 = temp;
+	
+	                                                                                gl.useProgram(progClear);
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.PCG2.tex);
+	                                                                                gl.uniform1i(u_pcgClear, 0);
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	                                                                                gl.enableVertexAttribArray(v_posClear);
+	                                                                                gl.vertexAttribPointer(v_posClear, 2, gl.FLOAT, false, 0, 0);
+	                                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo);
+	                                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	                                                                                gl.disableVertexAttribArray(v_posClear);
+	
+	                                                                                gl.useProgram(prog);
+	
+	                                                                                temp = grid.PCG1;
+	                                                                                grid.PCG1 = grid.PCG2;
+	                                                                                grid.PCG2 = temp;
+	
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.P.tex);
+	                                                                                gl.uniform1i(u_A, 0);
+	                                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.PCG2.tex);
+	                                                                                gl.uniform1i(u_pcg, 1);
+	
+	                                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo);
+	                                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	
+	                                                                                gl.uniform1f(u_scale, 1 / (grid.cellSize * grid.cellSize));
+	
+	                                                                                // gl.clearColor(0,0,0,0)
+	                                                                                // gl.clear(gl.COLOR_BUFFER_BIT)
+	
+	                                                                                gl.enable(gl.BLEND);
+	                                                                                gl.blendFunc(gl.ONE, gl.ONE);
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+	                                                                                gl.enableVertexAttribArray(v_id);
+	                                                                                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	                                                                                gl.drawArrays(gl.POINTS, 0, pointCount);
+	                                                                                gl.disableVertexAttribArray(v_id);
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	                                                                                gl.disable(gl.BLEND);
+	                                                                };
+	                                                }();
+	
+	                                                var computeAlpha = function () {
+	                                                                var prog = gl.createProgram();
+	
+	                                                                var vs = getShader(__webpack_require__(52), gl.VERTEX_SHADER);
+	                                                                var fs = getShader(__webpack_require__(44), gl.FRAGMENT_SHADER);
+	                                                                addShaders(prog, [vs, fs]);
+	
+	                                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	                                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                                var u_pcg = gl.getUniformLocation(prog, "u_pcg");
+	
+	                                                                var v_id = gl.getAttribLocation(prog, "v_id");
+	
+	                                                                var pointCount = grid.count[0] * grid.count[1] * grid.count[2];
+	                                                                var pointBuffer = gl.createBuffer();
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+	                                                                var data = new Float32Array(pointCount);
+	                                                                for (var i = 0; i < pointCount; ++i) {
+	                                                                                data[i] = i;
+	                                                                }
+	                                                                gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	
+	                                                                return function () {
+	                                                                                gl.useProgram(prog);
+	
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex);
+	                                                                                gl.uniform1i(u_pcg, 0);
+	                                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo);
+	                                                                                gl.enable(gl.SCISSOR_TEST);
+	                                                                                gl.viewport(1, 0, 1, 1);
+	                                                                                gl.scissor(1, 0, 1, 1);
+	                                                                                gl.clearColor(0, 0, 0, 0);
+	                                                                                gl.clear(gl.COLOR_BUFFER_BIT);
+	
+	                                                                                gl.enable(gl.BLEND);
+	                                                                                gl.blendFunc(gl.ONE, gl.ONE);
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+	                                                                                gl.enableVertexAttribArray(v_id);
+	                                                                                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	                                                                                gl.drawArrays(gl.POINTS, 0, pointCount);
+	                                                                                gl.disableVertexAttribArray(v_id);
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	                                                                                gl.disable(gl.BLEND);
+	
+	                                                                                gl.disable(gl.SCISSOR_TEST);
+	
+	                                                                                // var buf = new Float32Array(4)
+	                                                                                // gl.readPixels(0,0,1,1, gl.RGBA, gl.FLOAT, buf)
+	                                                                                // console.log('sigma:', buf[0])
+	                                                                                // gl.readPixels(1,0,1,1, gl.RGBA, gl.FLOAT, buf)
+	                                                                                // console.log('alphap:', buf[0])
+	                                                                };
+	                                                }();
+	
+	                                                var updateGuess = function () {
+	                                                                var prog = gl.createProgram();
+	                                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                                var fs = getShader(__webpack_require__(53), gl.FRAGMENT_SHADER);
+	                                                                addShaders(prog, [vs, fs]);
+	
+	                                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
+	                                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	
+	                                                                var u_pcg = gl.getUniformLocation(prog, "u_pcg");
+	                                                                var u_const = gl.getUniformLocation(prog, "u_const");
+	                                                                var u_alpha = gl.getUniformLocation(prog, "u_alpha");
+	
+	                                                                return function () {
+	                                                                                gl.useProgram(prog);
+	
+	                                                                                var temp = grid.PCG1;
+	                                                                                grid.PCG1 = grid.PCG2;
+	                                                                                grid.PCG2 = temp;
+	
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.PCG2.tex);
+	                                                                                gl.uniform1i(u_pcg, 0);
+	
+	                                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, tempTex.tex);
+	                                                                                gl.uniform1i(u_const, 1);
+	
+	                                                                                // gl.uniform1f(u_alpha, alpha)
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo);
+	
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	
+	                                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	                                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	                                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	
+	                                                                                gl.disableVertexAttribArray(v_pos);
+	                                                                };
+	                                                }();
+	
+	                                                var updateSearch = function () {
+	                                                                var prog = gl.createProgram();
+	                                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                                var fs = getShader(__webpack_require__(54), gl.FRAGMENT_SHADER);
+	                                                                addShaders(prog, [vs, fs]);
+	
+	                                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
+	                                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	
+	                                                                var u_pcg = gl.getUniformLocation(prog, "u_pcg");
+	                                                                var u_const = gl.getUniformLocation(prog, "u_const");
+	                                                                var u_beta = gl.getUniformLocation(prog, "u_beta");
+	
+	                                                                return function () {
+	                                                                                gl.useProgram(prog);
+	
+	                                                                                var temp = grid.PCG1;
+	                                                                                grid.PCG1 = grid.PCG2;
+	                                                                                grid.PCG2 = temp;
+	
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.PCG2.tex);
+	                                                                                gl.uniform1i(u_pcg, 0);
+	
+	                                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, tempTex.tex);
+	                                                                                gl.uniform1i(u_const, 1);
+	
+	                                                                                // gl.uniform1f(u_beta, beta)
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo);
+	
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	
+	                                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	                                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	                                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	
+	                                                                                gl.disableVertexAttribArray(v_pos);
+	                                                                };
+	                                                }();
+	
+	                                                var velocityUpdate = function () {
+	                                                                var prog = gl.createProgram();
+	                                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                                var fs = getShader(__webpack_require__(55), gl.FRAGMENT_SHADER);
+	                                                                addShaders(prog, [vs, fs]);
+	
+	                                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
+	                                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	
+	                                                                var u_grid = gl.getUniformLocation(prog, "u_grid");
+	                                                                var u_types = gl.getUniformLocation(prog, "u_types");
+	                                                                var u_pcg = gl.getUniformLocation(prog, "u_pcg");
+	                                                                var u_scale = gl.getUniformLocation(prog, "u_scale");
+	
+	                                                                return function (t) {
+	                                                                                gl.useProgram(prog);
+	
+	                                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
+	                                                                                gl.uniform1i(u_grid, 0);
+	
+	                                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.PCG1.tex);
+	                                                                                gl.uniform1i(u_pcg, 1);
+	
+	                                                                                gl.activeTexture(gl.TEXTURE2);
+	                                                                                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
+	                                                                                gl.uniform1i(u_types, 2);
+	
+	                                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	                                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                                gl.uniform1f(u_scale, 1 / grid.cellSize);
+	
+	                                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	
+	                                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	
+	                                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
+	                                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	                                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	
+	                                                                                gl.disableVertexAttribArray(v_pos);
+	
+	                                                                                grid.swap();
+	                                                                };
+	                                                }();
+	
+	                                                return function (t, shouldPrecondition) {
+	                                                                clearMatrices();
+	                                                                setupA(t);
+	                                                                setupb();
+	
+	                                                                if (shouldPrecondition) {
+	                                                                                precondition();
+	                                                                                preconditionZ(true);
+	                                                                }
+	
+	                                                                var buf = new Float32Array(4 * grid.textureLength * grid.textureLength);
+	
+	                                                                for (var i = 0; i < solverSteps; ++i) {
+	
+	                                                                                computeSigma(false, shouldPrecondition);
+	
+	                                                                                // var sigma = 0.0;
+	                                                                                // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
+	                                                                                // gl.readPixels(0,0,grid.textureLength,grid.textureLength,gl.RGBA, gl.FLOAT, buf)
+	                                                                                // for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
+	                                                                                //     sigma += buf[4*j + 1] * buf[4*j + 2];
+	                                                                                // }
+	
+	                                                                                // setZ()
+	                                                                                computeAs();
+	                                                                                computeAlpha();
+	
+	                                                                                // var alphap = 0.0;
+	                                                                                // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
+	                                                                                // gl.readPixels(0,0,grid.textureLength,grid.textureLength,gl.RGBA, gl.FLOAT, buf)
+	                                                                                // for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
+	                                                                                //     alphap += buf[4*j + 2] * buf[4*j + 3];
+	                                                                                // }
+	                                                                                // alpha = sigma / alphap;
+	                                                                                // console.log('alpha:', sigma / alphap, sigma, alphap);
+	
+	                                                                                // gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
+	                                                                                // gl.readPixels(0,0,2,2, gl.RGBA, gl.FLOAT, buf)
+	                                                                                // console.log('alpha:', buf[0] / buf[4], buf[0], buf[4])
+	
+	                                                                                updateGuess();
+	                                                                                if (shouldPrecondition) preconditionZ(false);
+	                                                                                computeSigma(true, shouldPrecondition);
+	
+	                                                                                // var sigmanew = 0.0;
+	                                                                                // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
+	                                                                                // gl.readPixels(0,0,grid.textureLength,grid.textureLength,gl.RGBA, gl.FLOAT, buf)
+	                                                                                // for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
+	                                                                                //     sigmanew += buf[4*j + 1] * buf[4*j + 2];
+	                                                                                // }
+	                                                                                // beta = sigmanew / sigma;
+	                                                                                // console.log('beta:', sigmanew / sigma, sigmanew, sigma)
+	
+	                                                                                // gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
+	                                                                                // gl.readPixels(0,0,2,2, gl.RGBA, gl.FLOAT, buf)
+	                                                                                // console.log('beta:', buf[8] / buf[0], buf[8], buf[0])
+	
+	                                                                                updateSearch();
+	                                                                }
+	                                                                var max = 0.0;
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo);
+	                                                                gl.readPixels(0, 0, grid.textureLength, grid.textureLength, gl.RGBA, gl.FLOAT, buf);
+	                                                                for (var j = 0; j < grid.count[0] * grid.count[1] * grid.count[2]; ++j) {
+	                                                                                var val = Math.abs(buf[4 * j + 1]);
+	                                                                                if (val > max) max = val;
+	                                                                }
+	                                                                console.log('error:', max);
+	
+	                                                                velocityUpdate(t);
+	                                                };
+	                                }();
+	
+	                                var extrapolateVelocity = function () {
+	
+	                                                var prog = gl.createProgram();
+	                                                var vs = getShader(__webpack_require__(32), gl.VERTEX_SHADER);
+	                                                var fs = getShader(__webpack_require__(56), gl.FRAGMENT_SHADER);
+	                                                addShaders(prog, [vs, fs]);
+	
+	                                                var v_pos = gl.getAttribLocation(prog, "v_pos");
+	                                                var u_texLength = gl.getUniformLocation(prog, "u_texLength");
+	                                                var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
+	                                                var u_grid = gl.getUniformLocation(prog, "u_grid");
+	                                                var u_types = gl.getUniformLocation(prog, "u_types");
+	                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	
+	                                                return function () {
+	                                                                gl.useProgram(prog);
+	
+	                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
+	                                                                gl.uniform1i(u_grid, 0);
+	
+	                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
+	                                                                gl.uniform1i(u_types, 1);
+	
+	                                                                gl.uniform1i(u_texLength, grid.textureLength);
+	                                                                gl.uniform1f(u_cellSize, grid.cellSize);
+	                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
+	                                                                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
+	
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
+	
+	                                                                gl.enableVertexAttribArray(v_pos);
+	                                                                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
+	                                                                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	                                                                gl.disableVertexAttribArray(v_pos);
+	
+	                                                                grid.swap();
+	                                                };
+	                                }();
+	
+	                                var updateVelocities = function () {
+	                                                var prog = gl.createProgram();
+	
+	                                                var vs = getShader(__webpack_require__(57), gl.VERTEX_SHADER);
+	                                                var fs = getShader(__webpack_require__(58), gl.FRAGMENT_SHADER);
+	                                                addShaders(prog, [vs, fs]);
+	
+	                                                var u_gA = gl.getUniformLocation(prog, "u_gA");
+	                                                var u_gOld = gl.getUniformLocation(prog, "u_gOld");
+	                                                var u_particles = gl.getUniformLocation(prog, "u_particles");
+	                                                var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
+	                                                var u_gridTexLength = gl.getUniformLocation(prog, "u_gridTexLength");
+	                                                var u_copy = gl.getUniformLocation(prog, "u_copy");
+	
+	                                                var u_min = gl.getUniformLocation(prog, "u_min");
+	                                                var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
+	                                                var u_count = gl.getUniformLocation(prog, "u_count");
+	                                                var u_t = gl.getUniformLocation(prog, "u_t");
+	
+	                                                var v_id = gl.getAttribLocation(prog, "v_id");
+	
+	                                                return function (t) {
+	                                                                gl.useProgram(prog);
+	
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, particles.B.fbo);
+	                                                                gl.viewport(0, 0, particles.textureLength, particles.textureLength);
+	
+	                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
+	                                                                gl.uniform1i(u_particles, 0);
+	
+	                                                                gl.activeTexture(gl.TEXTURE1);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
+	                                                                gl.uniform1i(u_gA, 1);
+	
+	                                                                gl.activeTexture(gl.TEXTURE2);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, grid.old.tex);
+	                                                                gl.uniform1i(u_gOld, 2);
+	
+	                                                                gl.uniform1i(u_particleTexLength, particles.textureLength);
+	                                                                gl.uniform1i(u_gridTexLength, grid.textureLength);
+	                                                                gl.uniform3fv(u_min, grid.min);
+	                                                                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
+	                                                                gl.uniform1f(u_cellSize, grid.cellSize);
+	                                                                gl.uniform1f(u_t, t);
+	
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
+	                                                                gl.enableVertexAttribArray(v_id);
+	                                                                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	
+	                                                                gl.uniform1i(u_copy, 0);
+	                                                                gl.drawArrays(gl.POINTS, 0, particles.length);
+	                                                                gl.uniform1i(u_copy, 1);
+	                                                                gl.drawArrays(gl.POINTS, 0, particles.length);
+	
+	                                                                gl.disableVertexAttribArray(v_id);
+	
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, null);
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                                                                particles.swap();
+	                                                };
+	                                }();
+	
+	                                var updatePositions = function () {
+	                                                var prog = gl.createProgram();
+	
+	                                                var vs = getShader(__webpack_require__(59), gl.VERTEX_SHADER);
+	                                                var fs = getShader(__webpack_require__(60), gl.FRAGMENT_SHADER);
+	                                                addShaders(prog, [vs, fs]);
+	
+	                                                var v_id = gl.getAttribLocation(prog, "v_id");
+	                                                var u_particles = gl.getUniformLocation(prog, "u_particles");
+	                                                var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
+	                                                var u_t = gl.getUniformLocation(prog, "u_t");
+	                                                var u_copy = gl.getUniformLocation(prog, "u_copy");
+	                                                var u_min = gl.getUniformLocation(prog, "u_min");
+	                                                var u_max = gl.getUniformLocation(prog, "u_max");
+	
+	                                                return function (t) {
+	                                                                gl.useProgram(prog);
+	
+	                                                                // gl.bindFramebuffer(gl.FRAMEBUFFER, particles.B.fbo)
+	                                                                // var data = new Float32Array(3600)
+	                                                                // gl.readPixels(0,0,3600,0,gl.RGBA, gl.FLOAT, data);
+	                                                                // console.log(data)
+	
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, particles.B.fbo);
+	                                                                gl.viewport(0, 0, particles.textureLength, particles.textureLength);
+	
+	                                                                gl.activeTexture(gl.TEXTURE0);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
+	                                                                gl.uniform1i(u_particles, 0);
+	
+	                                                                gl.uniform1f(u_t, t);
+	                                                                gl.uniform3fv(u_min, grid.min);
+	                                                                gl.uniform3fv(u_max, grid.max);
+	                                                                gl.uniform1i(u_particleTexLength, particles.textureLength);
+	
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
+	                                                                gl.enableVertexAttribArray(v_id);
+	                                                                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
+	
+	                                                                gl.uniform1i(u_copy, 0);
+	                                                                gl.drawArrays(gl.POINTS, 0, particles.length);
+	                                                                gl.uniform1i(u_copy, 1);
+	                                                                gl.drawArrays(gl.POINTS, 0, particles.length);
+	
+	                                                                gl.disableVertexAttribArray(v_id);
+	                                                                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	                                                                gl.bindTexture(gl.TEXTURE_2D, null);
+	                                                                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	
+	                                                                particles.swap();
+	                                                };
+	                                }();
+	
+	                                return {
+	                                                step: function step(t, shouldPrecondition) {
+	                                                                gl.clearColor(0, 0, 0, 0.0);
+	                                                                gl.disable(gl.DEPTH_TEST);
+	
+	                                                                clearGridVelocity();
+	
+	                                                                gl.enable(gl.BLEND);
+	                                                                gl.blendFunc(gl.ONE, gl.ONE);
+	                                                                projectToGrid();
+	                                                                gl.disable(gl.BLEND);
+	
+	                                                                copyGrid();
+	
+	                                                                markCells();
+	
+	                                                                gravityUpdate(t);
+	
+	                                                                enforceBoundary();
+	
+	                                                                pressureSolve(t, shouldPrecondition);
+	
+	                                                                enforceBoundary();
+	
+	                                                                extrapolateVelocity();
+	
+	                                                                enforceBoundary();
+	
+	                                                                updateVelocities(t);
+	
+	                                                                updatePositions(t);
+	                                                },
+	                                                shouldUpdate: false
+	                                };
 	                }
 	
-	                gl.disableVertexAttribArray(v_id);
-	
-	                grid.swap();
-	
-	                gl.useProgram(progAvg);
-	
-	                gl.activeTexture(gl.TEXTURE0);
-	                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
-	                gl.uniform1i(gU_old, 0);
-	
-	                gl.enableVertexAttribArray(v_pos);
-	
-	                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
-	
-	                gl.enableVertexAttribArray(v_pos);
-	                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
-	
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
-	                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	
-	                gl.disableVertexAttribArray(v_pos);
-	
-	                grid.swap();
-	            };
-	        }();
-	
-	        var copyGrid = function () {
-	            var prog = gl.createProgram();
-	
-	            var vs = getShader(__webpack_require__(31), gl.VERTEX_SHADER);
-	            var fs = getShader(__webpack_require__(36), gl.FRAGMENT_SHADER);
-	            addShaders(prog, [vs, fs]);
-	
-	            var v_pos = gl.getAttribLocation(prog, "v_pos");
-	            var u_grid = gl.getUniformLocation(prog, "u_grid");
-	
-	            return function () {
-	                gl.useProgram(prog);
-	
-	                gl.activeTexture(gl.TEXTURE0);
-	                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
-	                gl.uniform1i(u_grid, 0);
-	
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.old.fbo);
-	                gl.clear(gl.COLOR_BUFFER_BIT);
-	                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
-	
-	                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
-	                gl.enableVertexAttribArray(v_pos);
-	                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
-	
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	                gl.disableVertexAttribArray(v_pos);
-	            };
-	        }();
-	
-	        var gravityUpdate = function () {
-	            var prog = gl.createProgram();
-	
-	            var vs = getShader(__webpack_require__(31), gl.VERTEX_SHADER);
-	            var fs = getShader(__webpack_require__(37), gl.FRAGMENT_SHADER);
-	            addShaders(prog, [vs, fs]);
-	
-	            var v_pos = gl.getAttribLocation(prog, "v_pos");
-	            var gU_old = gl.getUniformLocation(prog, "gU_old");
-	            var u_t = gl.getUniformLocation(prog, "u_t");
-	
-	            var u_types = gl.getUniformLocation(prog, "u_types");
-	            var u_texLength = gl.getUniformLocation(prog, "u_texLength");
-	            var u_count = gl.getUniformLocation(prog, "u_count");
-	
-	            return function (t) {
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
-	                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
-	
-	                gl.useProgram(prog);
-	
-	                gl.activeTexture(gl.TEXTURE0);
-	                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
-	                gl.uniform1i(gU_old, 0);
-	                gl.uniform1f(u_t, t);
-	
-	                gl.activeTexture(gl.TEXTURE1);
-	                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
-	                gl.uniform1i(u_types, 1);
-	
-	                gl.uniform1i(u_texLength, grid.textureLength);
-	                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
-	
-	                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
-	
-	                gl.enableVertexAttribArray(v_pos);
-	                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
-	
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	
-	                gl.disableVertexAttribArray(v_pos);
-	
-	                grid.swap();
-	            };
-	        }();
-	
-	        var markCells = function () {
-	            var prog = gl.createProgram();
-	
-	            var vs = getShader(__webpack_require__(38), gl.VERTEX_SHADER);
-	            var fs = getShader(__webpack_require__(39), gl.FRAGMENT_SHADER);
-	            addShaders(prog, [vs, fs]);
-	
-	            var u_min = gl.getUniformLocation(prog, "u_min");
-	            var u_count = gl.getUniformLocation(prog, "u_count");
-	            var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
-	            var u_texLength = gl.getUniformLocation(prog, "u_texLength");
-	
-	            var u_particles = gl.getUniformLocation(prog, "u_particles");
-	            var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
-	
-	            var v_id = gl.getAttribLocation(prog, "v_id");
-	
-	            var prog2 = gl.createProgram();
-	
-	            var vs2 = getShader(__webpack_require__(31), gl.VERTEX_SHADER);
-	            var fs2 = getShader(__webpack_require__(40), gl.FRAGMENT_SHADER);
-	            addShaders(prog2, [vs2, fs2]);
-	
-	            var v_pos = gl.getAttribLocation(prog2, "v_pos");
-	            var u_texLength2 = gl.getUniformLocation(prog2, "u_texLength");
-	            var u_count2 = gl.getUniformLocation(prog, "u_count");
-	            var u_cellSize2 = gl.getUniformLocation(prog2, "u_cellSize");
-	
-	            return function () {
-	                gl.useProgram(prog);
-	
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.T.fbo);
-	                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
-	                gl.clear(gl.COLOR_BUFFER_BIT);
-	
-	                gl.activeTexture(gl.TEXTURE0);
-	                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
-	                gl.uniform1i(u_particles, 0);
-	
-	                gl.uniform1i(u_texLength, grid.textureLength);
-	                gl.uniform1i(u_particleTexLength, particles.textureLength);
-	                gl.uniform1f(u_cellSize, grid.cellSize);
-	                gl.uniform3fv(u_min, grid.min);
-	                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
-	
-	                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
-	                gl.enableVertexAttribArray(v_id);
-	                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
-	
-	                gl.drawArrays(gl.POINTS, 0, particles.length);
-	
-	                gl.disableVertexAttribArray(v_id);
-	
-	                /*gl.useProgram(prog2)
-	                
-	                gl.uniform1i(u_texLength2, grid.textureLength)
-	                gl.uniform3i(u_count2, grid.count[0], grid.count[1], grid.count[2])
-	                gl.uniform1f(u_cellSize2, grid.cellSize)
-	                 gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo)
-	                gl.enableVertexAttribArray(v_pos)
-	                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0)
-	                
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
-	                 gl.disableVertexAttribArray(v_pos)*/
-	            };
-	        }();
-	
-	        var enforceBoundary = function () {
-	            var prog = gl.createProgram();
-	
-	            var vs = getShader(__webpack_require__(31), gl.VERTEX_SHADER);
-	            var fs = getShader(__webpack_require__(41), gl.FRAGMENT_SHADER);
-	            addShaders(prog, [vs, fs]);
-	
-	            var v_pos = gl.getAttribLocation(prog, "v_pos");
-	            var u_texLength = gl.getUniformLocation(prog, "u_texLength");
-	            var u_min = gl.getUniformLocation(prog, "u_min");
-	            var u_max = gl.getUniformLocation(prog, "u_max");
-	            var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
-	            var u_grid = gl.getUniformLocation(prog, "u_grid");
-	            var u_types = gl.getUniformLocation(prog, "u_types");
-	            var u_count = gl.getUniformLocation(prog, "u_count");
-	
-	            return function () {
-	                gl.useProgram(prog);
-	
-	                gl.activeTexture(gl.TEXTURE0);
-	                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
-	                gl.uniform1i(u_grid, 0);
-	
-	                gl.activeTexture(gl.TEXTURE1);
-	                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
-	                gl.uniform1i(u_types, 1);
-	
-	                gl.uniform1i(u_texLength, grid.textureLength);
-	                gl.uniform3fv(u_min, grid.min);
-	                gl.uniform3fv(u_max, grid.max);
-	                gl.uniform1f(u_cellSize, grid.cellSize);
-	                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
-	
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
-	                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
-	
-	                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
-	
-	                gl.enableVertexAttribArray(v_pos);
-	                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
-	
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	
-	                gl.disableVertexAttribArray(v_pos);
-	
-	                grid.swap();
-	            };
-	        }();
-	
-	        var extrapolateVelocity = function () {
-	
-	            var prog = gl.createProgram();
-	            var vs = getShader(__webpack_require__(31), gl.VERTEX_SHADER);
-	            var fs = getShader(__webpack_require__(42), gl.FRAGMENT_SHADER);
-	            addShaders(prog, [vs, fs]);
-	
-	            var v_pos = gl.getAttribLocation(prog, "v_pos");
-	            var u_texLength = gl.getUniformLocation(prog, "u_texLength");
-	            var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
-	            var u_grid = gl.getUniformLocation(prog, "u_grid");
-	            var u_types = gl.getUniformLocation(prog, "u_types");
-	            var u_count = gl.getUniformLocation(prog, "u_count");
-	
-	            return function () {
-	                gl.useProgram(prog);
-	
-	                gl.activeTexture(gl.TEXTURE0);
-	                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
-	                gl.uniform1i(u_grid, 0);
-	
-	                gl.activeTexture(gl.TEXTURE1);
-	                gl.bindTexture(gl.TEXTURE_2D, grid.T.tex);
-	                gl.uniform1i(u_types, 1);
-	
-	                gl.uniform1i(u_texLength, grid.textureLength);
-	                gl.uniform1f(u_cellSize, grid.cellSize);
-	                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
-	
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.B.fbo);
-	                gl.viewport(0, 0, grid.textureLength, grid.textureLength);
-	
-	                gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
-	
-	                gl.enableVertexAttribArray(v_pos);
-	                gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	                gl.disableVertexAttribArray(v_pos);
-	
-	                grid.swap();
-	            };
-	        }();
-	
-	        var updateVelocities = function () {
-	            var prog = gl.createProgram();
-	
-	            var vs = getShader(__webpack_require__(43), gl.VERTEX_SHADER);
-	            var fs = getShader(__webpack_require__(44), gl.FRAGMENT_SHADER);
-	            addShaders(prog, [vs, fs]);
-	
-	            var u_gA = gl.getUniformLocation(prog, "u_gA");
-	            var u_gOld = gl.getUniformLocation(prog, "u_gOld");
-	            var u_particles = gl.getUniformLocation(prog, "u_particles");
-	            var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
-	            var u_gridTexLength = gl.getUniformLocation(prog, "u_gridTexLength");
-	            var u_copy = gl.getUniformLocation(prog, "u_copy");
-	
-	            var u_min = gl.getUniformLocation(prog, "u_min");
-	            var u_cellSize = gl.getUniformLocation(prog, "u_cellSize");
-	            var u_count = gl.getUniformLocation(prog, "u_count");
-	            var u_t = gl.getUniformLocation(prog, "u_t");
-	
-	            var v_id = gl.getAttribLocation(prog, "v_id");
-	
-	            return function (t) {
-	                gl.useProgram(prog);
-	
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, particles.B.fbo);
-	                gl.viewport(0, 0, particles.textureLength, particles.textureLength);
-	
-	                gl.activeTexture(gl.TEXTURE0);
-	                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
-	                gl.uniform1i(u_particles, 0);
-	
-	                gl.activeTexture(gl.TEXTURE1);
-	                gl.bindTexture(gl.TEXTURE_2D, grid.A.tex);
-	                gl.uniform1i(u_gA, 1);
-	
-	                gl.activeTexture(gl.TEXTURE2);
-	                gl.bindTexture(gl.TEXTURE_2D, grid.old.tex);
-	                gl.uniform1i(u_gOld, 2);
-	
-	                gl.uniform1i(u_particleTexLength, particles.textureLength);
-	                gl.uniform1i(u_gridTexLength, grid.textureLength);
-	                gl.uniform3fv(u_min, grid.min);
-	                gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2]);
-	                gl.uniform1f(u_cellSize, grid.cellSize);
-	                gl.uniform1f(u_t, t);
-	
-	                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
-	                gl.enableVertexAttribArray(v_id);
-	                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
-	
-	                gl.uniform1i(u_copy, 0);
-	                gl.drawArrays(gl.POINTS, 0, particles.length);
-	                gl.uniform1i(u_copy, 1);
-	                gl.drawArrays(gl.POINTS, 0, particles.length);
-	
-	                gl.disableVertexAttribArray(v_id);
-	
-	                gl.bindBuffer(gl.ARRAY_BUFFER, null);
-	                gl.bindTexture(gl.TEXTURE_2D, null);
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	                particles.swap();
-	            };
-	        }();
-	
-	        var updatePositions = function () {
-	            var prog = gl.createProgram();
-	
-	            var vs = getShader(__webpack_require__(45), gl.VERTEX_SHADER);
-	            var fs = getShader(__webpack_require__(46), gl.FRAGMENT_SHADER);
-	            addShaders(prog, [vs, fs]);
-	
-	            var v_id = gl.getAttribLocation(prog, "v_id");
-	            var u_particles = gl.getUniformLocation(prog, "u_particles");
-	            var u_particleTexLength = gl.getUniformLocation(prog, "u_particleTexLength");
-	            var u_t = gl.getUniformLocation(prog, "u_t");
-	            var u_copy = gl.getUniformLocation(prog, "u_copy");
-	            var u_min = gl.getUniformLocation(prog, "u_min");
-	            var u_max = gl.getUniformLocation(prog, "u_max");
-	
-	            return function (t) {
-	                gl.useProgram(prog);
-	
-	                // gl.bindFramebuffer(gl.FRAMEBUFFER, particles.B.fbo)
-	                // var data = new Float32Array(3600)
-	                // gl.readPixels(0,0,3600,0,gl.RGBA, gl.FLOAT, data);
-	                // console.log(data)
-	
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, particles.B.fbo);
-	                gl.viewport(0, 0, particles.textureLength, particles.textureLength);
-	
-	                gl.activeTexture(gl.TEXTURE0);
-	                gl.bindTexture(gl.TEXTURE_2D, particles.A.tex);
-	                gl.uniform1i(u_particles, 0);
-	
-	                gl.uniform1f(u_t, t);
-	                gl.uniform3fv(u_min, grid.min);
-	                gl.uniform3fv(u_max, grid.max);
-	                gl.uniform1i(u_particleTexLength, particles.textureLength);
-	
-	                gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids);
-	                gl.enableVertexAttribArray(v_id);
-	                gl.vertexAttribPointer(v_id, 1, gl.FLOAT, false, 0, 0);
-	
-	                gl.uniform1i(u_copy, 0);
-	                gl.drawArrays(gl.POINTS, 0, particles.length);
-	                gl.uniform1i(u_copy, 1);
-	                gl.drawArrays(gl.POINTS, 0, particles.length);
-	
-	                gl.disableVertexAttribArray(v_id);
-	                gl.bindBuffer(gl.ARRAY_BUFFER, null);
-	                gl.bindTexture(gl.TEXTURE_2D, null);
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	                particles.swap();
-	            };
-	        }();
-	
-	        return {
-	            step: function step(t) {
-	                gl.clearColor(0, 0, 0, 0.0);
-	                gl.disable(gl.DEPTH_TEST);
-	
-	                clearGridVelocity();
-	
-	                gl.enable(gl.BLEND);
-	                gl.blendFunc(gl.ONE, gl.ONE);
-	                projectToGrid();
-	                gl.disable(gl.BLEND);
-	
-	                copyGrid();
-	
-	                markCells();
-	
-	                gravityUpdate(t);
-	
-	                enforceBoundary();
-	
-	                // pressureUpdate
-	
-	                // enforceBoundary();
-	
-	                extrapolateVelocity();
-	
-	                enforceBoundary();
-	
-	                updateVelocities(t);
-	
-	                updatePositions(t);
-	            },
-	            shouldUpdate: false
-	        };
-	    }
-	
-	    return {
-	        Sim: Sim
-	    };
+	                return {
+	                                Sim: Sim
+	                };
 	};
 	
-	var _glMatrix = __webpack_require__(6);
-
-/***/ },
-/* 31 */
-/***/ function(module, exports) {
-
-	module.exports = "\nattribute vec2 v_pos;\n\nvarying vec2 f_uv;\n\n void main() {\n     f_uv = v_pos * 0.5 + 0.5;\n     gl_Position = vec4(v_pos, 0.0, 1.0);\n }"
+	var _glMatrix = __webpack_require__(7);
 
 /***/ },
 /* 32 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nvarying vec2 f_uv;\n\nvoid main() {\n    gl_FragColor = vec4(0,0,0,0);\n}"
+	module.exports = "\nattribute vec2 v_pos;\n\nvarying vec2 f_uv;\n\n void main() {\n     f_uv = v_pos * 0.5 + 0.5;\n     gl_Position = vec4(v_pos, 0.0, 1.0);\n }"
 
 /***/ },
 /* 33 */
 /***/ function(module, exports) {
 
-	module.exports = "\nuniform vec3 u_min;\nuniform ivec3 u_count;\nuniform ivec3 u_goffset;\nuniform float u_cellSize;\nuniform int u_texLength;\nuniform int u_g;\n\nattribute float v_id;\nuniform sampler2D u_particles;\nuniform int u_particleTexLength;\n\nvarying vec4 vel;\n\nivec3 toXYZ(int idx, ivec3 count) {\n    int z = idx / (count.x * count.y);\n    int y = (idx - z * (count.x * count.y)) / count.x;\n    int x = idx - y * count.x - z * (count.x * count.y);\n\n    return ivec3(x,y,z);\n}\n\nint toFlat(ivec3 idx, ivec3 count) {\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\n}\n\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\n    int idx = pIdx.x + pIdx.y * texLength;\n    return toXYZ(idx, count);\n}\n\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    return texture2D(grid, gUV);\n}\n\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    for (int i = 0; i < 4; ++i) {\n        if (i == c) return texture2D(grid, gUV)[i];\n    }\n    return 0.0;\n}\n\nbool checkIdx(ivec3 idx, ivec3 count) {\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\n}\n\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\n    return (pos - min) / cellSize;\n}\n\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\n}\n\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\n    return vec3(idx)*cellSize + min;\n}\n\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\n\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\n\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nvoid main() {\n\n    int pIdx = int(v_id) * 2;\n    int vIdx = int(v_id) * 2 + 1;\n\n    int pV = pIdx / u_particleTexLength;\n    int pU = pIdx - pV * u_particleTexLength;\n\n    int vV = vIdx / u_particleTexLength;\n    int vU = vIdx - vV * u_particleTexLength;\n\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\n\n    vec3 v_pos = texture2D(u_particles, pUV).rgb;\n    vec3 v_vel = texture2D(u_particles, vUV).rgb;\n\n    vec3 cellOffset = vec3(0.5, 0.5, 0.5);\n    if (u_g == 0) {\n        cellOffset[0] = 0.0;\n    } else if (u_g == 1) {\n        cellOffset[1] = 0.0;\n    } else if (u_g == 2) {\n        cellOffset[2] = 0.0;\n    }\n    \n    vec3 fIdx = (v_pos - u_min) / u_cellSize;\n    ivec3 iIdx = ivec3(floor(fIdx)) + u_goffset;\n\n    if (\n        any(lessThan(fIdx, vec3(0,0,0))) || \n        any(greaterThanEqual(fIdx, floor(vec3(u_count) - cellOffset))) ||\n        any(lessThan(vec3(iIdx), vec3(0,0,0))) || \n        any(greaterThanEqual(vec3(iIdx), floor(vec3(u_count) - cellOffset)))\n    ) {   \n        gl_PointSize = 0.0;\n        gl_Position = vec4(vec3(10000),1);\n        return;\n    }\n\n    float d = distance(fIdx, vec3(iIdx) + cellOffset);\n    float weight = max(1.0 - d*d / 1.0, 0.0);\n\n    vel = vec4(0.0, 0.0, 0.0, weight);\n    if (u_g == 0) {\n        vel[0] = weight * v_vel.x;\n    } else if (u_g == 1) {\n        vel[1] = weight * v_vel.y;\n    } else if (u_g == 2) {\n        vel[2] = weight * v_vel.z;\n    }\n\n    int flatIdx = toFlat(iIdx, u_count);\n\n    int t = flatIdx / u_texLength;\n    int s = flatIdx - t * u_texLength;\n    vec2 st = (vec2(s, t) + 0.01) / float(u_texLength);\n\n    gl_Position = vec4(st * 2.0 - 1.0, -1.0, 1.0);\n    gl_PointSize = 1.0;\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nvarying vec2 f_uv;\r\n\r\nvoid main() {\r\n    gl_FragColor = vec4(0,0,0,0);\r\n}"
 
 /***/ },
 /* 34 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nvarying vec4 vel;\n\nvoid main() {\n    gl_FragColor = vel;\n}"
+	module.exports = "\r\nuniform vec3 u_min;\r\nuniform ivec3 u_count;\r\nuniform ivec3 u_goffset;\r\nuniform float u_cellSize;\r\nuniform int u_texLength;\r\nuniform int u_g;\r\n\r\nattribute float v_id;\r\nuniform sampler2D u_particles;\r\nuniform int u_particleTexLength;\r\n\r\nvarying vec4 vel;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n\r\n    int pIdx = int(v_id) * 2;\r\n    int vIdx = int(v_id) * 2 + 1;\r\n\r\n    int pV = pIdx / u_particleTexLength;\r\n    int pU = pIdx - pV * u_particleTexLength;\r\n\r\n    int vV = vIdx / u_particleTexLength;\r\n    int vU = vIdx - vV * u_particleTexLength;\r\n\r\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\r\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\r\n\r\n    vec3 v_pos = texture2D(u_particles, pUV).rgb;\r\n    vec3 v_vel = texture2D(u_particles, vUV).rgb;\r\n\r\n    vec3 cellOffset = vec3(0.5, 0.5, 0.5);\r\n    if (u_g == 0) {\r\n        cellOffset[0] = 0.0;\r\n    } else if (u_g == 1) {\r\n        cellOffset[1] = 0.0;\r\n    } else if (u_g == 2) {\r\n        cellOffset[2] = 0.0;\r\n    }\r\n    \r\n    vec3 fIdx = (v_pos - u_min) / u_cellSize;\r\n    ivec3 iIdx = ivec3(floor(fIdx)) + u_goffset;\r\n\r\n    if (\r\n        any(lessThan(fIdx, vec3(0,0,0))) || \r\n        any(greaterThanEqual(fIdx, floor(vec3(u_count) - cellOffset))) ||\r\n        any(lessThan(vec3(iIdx), vec3(0,0,0))) || \r\n        any(greaterThanEqual(vec3(iIdx), floor(vec3(u_count) - cellOffset)))\r\n    ) {   \r\n        gl_PointSize = 0.0;\r\n        gl_Position = vec4(vec3(10000),1);\r\n        return;\r\n    }\r\n\r\n    float d = distance(fIdx, vec3(iIdx) + cellOffset);\r\n    float weight = max(1.0 - d*d / 1.0, 0.0);\r\n\r\n    vel = vec4(0.0, 0.0, 0.0, weight);\r\n    if (u_g == 0) {\r\n        vel[0] = weight * v_vel.x;\r\n    } else if (u_g == 1) {\r\n        vel[1] = weight * v_vel.y;\r\n    } else if (u_g == 2) {\r\n        vel[2] = weight * v_vel.z;\r\n    }\r\n\r\n    int flatIdx = toFlat(iIdx, u_count);\r\n\r\n    int t = flatIdx / u_texLength;\r\n    int s = flatIdx - t * u_texLength;\r\n    vec2 st = (vec2(s, t) + 0.01) / float(u_texLength);\r\n\r\n    gl_Position = vec4(st * 2.0 - 1.0, -1.0, 1.0);\r\n    gl_PointSize = 1.0;\r\n}"
 
 /***/ },
 /* 35 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nuniform sampler2D gU_old;\nuniform float u_t;\n\nvarying vec2 f_uv;\n\nvoid main() {\n    vec4 col = texture2D(gU_old, f_uv);\n    if (col.w > 0.0) {\n        col /= col.w;\n    }\n    gl_FragColor = col;\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nvarying vec4 vel;\r\n\r\nvoid main() {\r\n    gl_FragColor = vel;\r\n}"
 
 /***/ },
 /* 36 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nuniform sampler2D u_grid;\n\nvarying vec2 f_uv;\n\nvoid main() {\n    gl_FragColor = texture2D(u_grid, f_uv);\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D gU_old;\r\nuniform float u_t;\r\n\r\nvarying vec2 f_uv;\r\n\r\nvoid main() {\r\n    vec4 col = texture2D(gU_old, f_uv);\r\n    if (col.w > 0.0) {\r\n        col /= col.w;\r\n    }\r\n    gl_FragColor = col;\r\n}"
 
 /***/ },
 /* 37 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nuniform sampler2D gU_old;\nuniform float u_t;\n\nuniform sampler2D u_types;\nuniform int u_texLength;\nuniform ivec3 u_count;\n\nvarying vec2 f_uv;\n\nivec3 toXYZ(int idx, ivec3 count) {\n    int z = idx / (count.x * count.y);\n    int y = (idx - z * (count.x * count.y)) / count.x;\n    int x = idx - y * count.x - z * (count.x * count.y);\n\n    return ivec3(x,y,z);\n}\n\nint toFlat(ivec3 idx, ivec3 count) {\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\n}\n\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\n    int idx = pIdx.x + pIdx.y * texLength;\n    return toXYZ(idx, count);\n}\n\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    return texture2D(grid, gUV);\n}\n\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    for (int i = 0; i < 4; ++i) {\n        if (i == c) return texture2D(grid, gUV)[i];\n    }\n    return 0.0;\n}\n\nbool checkIdx(ivec3 idx, ivec3 count) {\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\n}\n\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\n    return (pos - min) / cellSize;\n}\n\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\n}\n\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\n    return vec3(idx)*cellSize + min;\n}\n\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\n\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\n\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nvoid main() {\n\n    ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\n\n    if (!checkIdx(idx, u_count)) {\n        discard;\n    }\n\n    for (int i = -1; i <= 1; ++i) {\n        for (int j = -1; j <= 1; ++j) {\n            for (int k = -1; k <= 1; ++k) {\n                if (checkIdx(idx + ivec3(i,j,k), u_count - 1) && gridComponentAt(u_types, idx + ivec3(i,j,k), u_count, u_texLength, 0) == 1.0) {\n                    vec4 col = texture2D(gU_old, f_uv);\n                    col.g -= 9.81 * u_t / 1000.0;\n                    gl_FragColor = vec4(col.rgb, 1.0);\n                    return;\n                }\n            }\n        }  \n    }\n    discard;\n\n    \n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D u_grid;\r\n\r\nvarying vec2 f_uv;\r\n\r\nvoid main() {\r\n    gl_FragColor = texture2D(u_grid, f_uv);\r\n}"
 
 /***/ },
 /* 38 */
 /***/ function(module, exports) {
 
-	module.exports = "\nuniform vec3 u_min;\nuniform ivec3 u_count;\nuniform float u_cellSize;\nuniform int u_texLength;\n\nattribute float v_id;\nuniform sampler2D u_particles;\nuniform int u_particleTexLength;\n\nvarying float type;\n\nivec3 toXYZ(int idx, ivec3 count) {\n    int z = idx / (count.x * count.y);\n    int y = (idx - z * (count.x * count.y)) / count.x;\n    int x = idx - y * count.x - z * (count.x * count.y);\n\n    return ivec3(x,y,z);\n}\n\nint toFlat(ivec3 idx, ivec3 count) {\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\n}\n\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\n    int idx = pIdx.x + pIdx.y * texLength;\n    return toXYZ(idx, count);\n}\n\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    return texture2D(grid, gUV);\n}\n\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    for (int i = 0; i < 4; ++i) {\n        if (i == c) return texture2D(grid, gUV)[i];\n    }\n    return 0.0;\n}\n\nbool checkIdx(ivec3 idx, ivec3 count) {\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\n}\n\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\n    return (pos - min) / cellSize;\n}\n\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\n}\n\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\n    return vec3(idx)*cellSize + min;\n}\n\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\n\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\n\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nvoid main() {\n    int pIdx = int(v_id) * 2;\n    int vIdx = int(v_id) * 2 + 1;\n\n    int pV = pIdx / u_particleTexLength;\n    int pU = pIdx - pV * u_particleTexLength;\n\n    int vV = vIdx / u_particleTexLength;\n    int vU = vIdx - vV * u_particleTexLength;\n\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\n\n    vec3 v_pos = texture2D(u_particles, pUV).rgb;\n    vec3 v_vel = texture2D(u_particles, vUV).rgb;\n\n    ivec3 idx = indexOf(v_pos, u_min, u_cellSize);\n    idx = ivec3(clamp(vec3(idx), vec3(0,0,0), vec3(u_count - 2)));\n    int flatIdx = toFlat(idx, u_count);\n    int t = flatIdx / u_texLength;\n    int s = flatIdx - t * u_texLength;\n    vec2 st = (vec2(s, t) + 0.1) / float(u_texLength);\n    gl_Position = vec4(st * 2.0 - 1.0, -1.0, 1.0);\n    gl_PointSize = 1.0;\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D gU_old;\r\nuniform float u_t;\r\n\r\nuniform sampler2D u_types;\r\nuniform int u_texLength;\r\nuniform ivec3 u_count;\r\n\r\nvarying vec2 f_uv;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n\r\n    ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\r\n\r\n    if (!checkIdx(idx, u_count)) {\r\n        discard;\r\n    }\r\n\r\n    for (int i = -1; i <= 1; ++i) {\r\n        for (int j = -1; j <= 1; ++j) {\r\n            for (int k = -1; k <= 1; ++k) {\r\n                if (checkIdx(idx + ivec3(i,j,k), u_count - 1) && gridComponentAt(u_types, idx + ivec3(i,j,k), u_count, u_texLength, 0) == 1.0) {\r\n                    vec4 col = texture2D(gU_old, f_uv);\r\n                    col.g -= 9.81 * u_t;// / 10.0;\r\n                    gl_FragColor = vec4(col.rgb, 1.0);\r\n                    return;\r\n                }\r\n            }\r\n        }  \r\n    }\r\n    discard;\r\n\r\n    \r\n}"
 
 /***/ },
 /* 39 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nvarying float type;\n\nvoid main() {\n    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);\n}"
+	module.exports = "\r\nuniform vec3 u_min;\r\nuniform ivec3 u_count;\r\nuniform float u_cellSize;\r\nuniform int u_texLength;\r\n\r\nattribute float v_id;\r\nuniform sampler2D u_particles;\r\nuniform int u_particleTexLength;\r\n\r\nvarying float type;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n    int pIdx = (int(v_id) / 7) * 2;\r\n    int vIdx = (int(v_id) / 7) * 2 + 1;\r\n\r\n    int type = int(v_id) - (int(v_id) / 7) * 7;\r\n\r\n    int pV = pIdx / u_particleTexLength;\r\n    int pU = pIdx - pV * u_particleTexLength;\r\n\r\n    int vV = vIdx / u_particleTexLength;\r\n    int vU = vIdx - vV * u_particleTexLength;\r\n\r\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\r\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\r\n\r\n    vec3 v_pos = texture2D(u_particles, pUV).rgb;\r\n    // vec3 v_vel = texture2D(u_particles, vUV).rgb;\r\n\r\n    ivec3 idx = indexOf(v_pos, u_min, u_cellSize);\r\n    idx = ivec3(clamp(vec3(idx), vec3(0,0,0), vec3(u_count - 2)));\r\n\r\n    ivec3 oldIdx = idx;\r\n\r\n    if (type == 0) {\r\n\r\n    } else if (type == 1) {\r\n        idx += ivec3(1, 0, 0);\r\n    } else if (type == 2) {\r\n        idx -= ivec3(1, 0, 0);\r\n    } else if (type == 3) {\r\n        idx += ivec3(0, 1, 0);\r\n    } else if (type == 4) {\r\n        idx -= ivec3(0, 1, 0);\r\n    } else if (type == 5) {\r\n        idx += ivec3(0, 0, 1);\r\n    } else if (type == 6) {\r\n        idx -= ivec3(0, 0, 1);\r\n    }\r\n\r\n    if (!checkIdx(idx, u_count)) {\r\n        idx = oldIdx;\r\n    }\r\n\r\n    int flatIdx = toFlat(idx, u_count);\r\n    int t = flatIdx / u_texLength;\r\n    int s = flatIdx - t * u_texLength;\r\n    vec2 st = (vec2(s, t) + 0.1) / float(u_texLength);\r\n    gl_Position = vec4(st * 2.0 - 1.0, -1.0, 1.0);\r\n    gl_PointSize = 1.0;\r\n}"
 
 /***/ },
 /* 40 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nuniform sampler2D u_grid;\nuniform int u_texLength;\nuniform ivec3 u_count;\nuniform float u_cellSize;\n\nvarying vec2 f_uv;\n\nivec3 toXYZ(int idx, ivec3 count) {\n    int z = idx / (count.x * count.y);\n    int y = (idx - z * (count.x * count.y)) / count.x;\n    int x = idx - y * count.x - z * (count.x * count.y);\n\n    return ivec3(x,y,z);\n}\n\nint toFlat(ivec3 idx, ivec3 count) {\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\n}\n\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\n    int idx = pIdx.x + pIdx.y * texLength;\n    return toXYZ(idx, count);\n}\n\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    return texture2D(grid, gUV);\n}\n\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    for (int i = 0; i < 4; ++i) {\n        if (i == c) return texture2D(grid, gUV)[i];\n    }\n    return 0.0;\n}\n\nbool checkIdx(ivec3 idx, ivec3 count) {\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\n}\n\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\n    return (pos - min) / cellSize;\n}\n\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\n}\n\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\n    return vec3(idx)*cellSize + min;\n}\n\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\n\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\n\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nvoid main() {\n    ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\n\n    if (any(equal(idx, ivec3(0,0,0))) || any(equal(idx, u_count - 1))) {\n      gl_FragColor = vec4(2.0, 2.0, 2.0, 2.0);\n    } else {\n      discard;\n    }\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nvarying float type;\r\n\r\nvoid main() {\r\n    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);\r\n}"
 
 /***/ },
 /* 41 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nuniform sampler2D u_grid;\nuniform sampler2D u_types;\nuniform int u_texLength;\nuniform vec3 u_min;\nuniform vec3 u_max;\nuniform float u_cellSize;\nuniform ivec3 u_count;\n\nvarying vec2 f_uv;\n\nivec3 toXYZ(int idx, ivec3 count) {\n    int z = idx / (count.x * count.y);\n    int y = (idx - z * (count.x * count.y)) / count.x;\n    int x = idx - y * count.x - z * (count.x * count.y);\n\n    return ivec3(x,y,z);\n}\n\nint toFlat(ivec3 idx, ivec3 count) {\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\n}\n\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\n    int idx = pIdx.x + pIdx.y * texLength;\n    return toXYZ(idx, count);\n}\n\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    return texture2D(grid, gUV);\n}\n\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    for (int i = 0; i < 4; ++i) {\n        if (i == c) return texture2D(grid, gUV)[i];\n    }\n    return 0.0;\n}\n\nbool checkIdx(ivec3 idx, ivec3 count) {\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\n}\n\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\n    return (pos - min) / cellSize;\n}\n\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\n}\n\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\n    return vec3(idx)*cellSize + min;\n}\n\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\n\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\n\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nvoid main() {\n    // ivec3 count = gridCount(vec3(0.5, 0.5, 0.5) * u_cellSize, u_max, u_min, u_cellSize);\n    // ivec3 idx = UVtoXYZ(f_uv, u_texLength, count);\n\n    vec4 current = texture2D(u_grid, f_uv);\n    \n    ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\n\n    if (!checkIdx(idx, u_count)) {\n        discard;\n    }\n\n    // ivec3 left = idx - ivec3(1,0,0);\n    // ivec3 right = idx + ivec3(1,0,0);\n    // ivec3 up = idx + ivec3(0,1,0);\n    // ivec3 down = idx - ivec3(0,1,0);\n    // ivec3 front = idx + ivec3(0,0,1);\n    // ivec3 back = idx - ivec3(0,0,1);\n\n    // set adjacent to solid to 0\n    // if (gridComponentAt(u_types, left, count, u_texLength, 0) == 2.0) {\n    //   current[0] = max(current[0], 0.0);\n    // }\n    // if (gridComponentAt(u_types, right, count, u_texLength, 0) == 2.0) {\n    //   current[0] = min(current[0], 0.0);\n    // }\n    // if (gridComponentAt(u_types, down, count, u_texLength, 0) == 2.0) {\n    //   current[1] = max(current[1], 0.0);\n    // }\n    // if (gridComponentAt(u_types, up, count, u_texLength, 0) == 2.0) {\n    //   current[1] = min(current[1], 0.0);\n    // }\n    // if (gridComponentAt(u_types, back, count, u_texLength, 0) == 2.0) {\n    //   current[2] = max(current[2], 0.0);\n    // }\n    // if (gridComponentAt(u_types, front, count, u_texLength, 0) == 2.0) {\n    //   current[2] = min(current[2], 0.0);\n    // }\n\n    // clamp to bounds\n    // current.xyz = mix(current.xyz, clamp(current.xyz, current.xyz, vec3(0,0,0)), vec3(equal(idx, count)));\n    // current.xyz = mix(current.xyz, clamp(current.xyz, vec3(0,0,0), current.xyz), vec3(equal(idx, ivec3(0,0,0))));\n    // current.xyz = mix(current.xyz, clamp(current.xyz, current.xyz, vec3(0,0,0)), vec3(equal(idx, u_count - 1)));\n\n    if (idx.x == 0) current.x = max(0.0, current.x);\n    if (idx.y == 0) current.y = max(0.0, current.y);\n    if (idx.z == 0) current.z = max(0.0, current.z);\n\n    if (idx.x == u_count.x - 1) current.x = min(0.0, current.x);\n    if (idx.y == u_count.y - 1) current.y = min(0.0, current.y);\n    if (idx.z == u_count.z - 1) current.z = min(0.0, current.z);\n\n    gl_FragColor = current;\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D u_grid;\r\nuniform int u_texLength;\r\nuniform ivec3 u_count;\r\nuniform float u_cellSize;\r\n\r\nvarying vec2 f_uv;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n    ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\r\n\r\n    if (any(equal(idx, ivec3(0,0,0))) || any(equal(idx, u_count - 2))) {\r\n      gl_FragColor = vec4(2.0, 2.0, 2.0, 2.0);\r\n    } else {\r\n      discard;\r\n    }\r\n}"
 
 /***/ },
 /* 42 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nuniform sampler2D u_grid;\nuniform sampler2D u_types;\nuniform int u_texLength;\nuniform float u_cellSize;\nuniform ivec3 u_count;\n\nvarying vec2 f_uv;\n\nivec3 toXYZ(int idx, ivec3 count) {\n    int z = idx / (count.x * count.y);\n    int y = (idx - z * (count.x * count.y)) / count.x;\n    int x = idx - y * count.x - z * (count.x * count.y);\n\n    return ivec3(x,y,z);\n}\n\nint toFlat(ivec3 idx, ivec3 count) {\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\n}\n\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\n    int idx = pIdx.x + pIdx.y * texLength;\n    return toXYZ(idx, count);\n}\n\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    return texture2D(grid, gUV);\n}\n\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    for (int i = 0; i < 4; ++i) {\n        if (i == c) return texture2D(grid, gUV)[i];\n    }\n    return 0.0;\n}\n\nbool checkIdx(ivec3 idx, ivec3 count) {\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\n}\n\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\n    return (pos - min) / cellSize;\n}\n\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\n}\n\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\n    return vec3(idx)*cellSize + min;\n}\n\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\n\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\n\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nvoid main() {\n    ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\n\n    if (!checkIdx(idx, u_count)) {\n        discard;\n    }\n\n    vec4 current = texture2D(u_grid, f_uv);\n\n    ivec3 tCount = u_count - ivec3(1,1,1);\n    ivec3 xCount = u_count - ivec3(0,1,1);\n    ivec3 yCount = u_count - ivec3(1,0,1);\n    ivec3 zCount = u_count - ivec3(1,1,0);\n\n    if (\n        checkIdx(idx, xCount) &&\n        ((checkIdx(idx + ivec3(-1,0,0), tCount) &&\n        gridComponentAt(u_types, idx + ivec3(-1,0,0), u_count, u_texLength, 0) != 1.0) ||\n        (checkIdx(idx, tCount) &&\n        gridComponentAt(u_types, idx, u_count, u_texLength, 0) != 1.0))\n    ) {\n        bool fromU = (checkIdx(idx + ivec3(-1, 1, 0), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 1, 0), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3( 0, 1, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 1, 0), u_count, u_texLength, 0) == 1.0);\n        bool fromD = (checkIdx(idx + ivec3(-1,-1, 0), tCount) && gridComponentAt(u_types, idx + ivec3(-1,-1, 0), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3( 0,-1, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 0,-1, 0), u_count, u_texLength, 0) == 1.0);\n        bool fromF = (checkIdx(idx + ivec3(-1, 0, 1), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 0, 1), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3( 0, 0, 1), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 0, 1), u_count, u_texLength, 0) == 1.0);\n        bool fromB = (checkIdx(idx + ivec3(-1, 0,-1), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 0,-1), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3( 0, 0,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 0,-1), u_count, u_texLength, 0) == 1.0);\n        float val = 0.0;\n\n        int count = int(fromU) + int(fromD) + int(fromF) + int(fromB);\n        if (fromU) val += gridComponentAt(u_grid, idx + ivec3(0, 1, 0), u_count, u_texLength, 0);\n        if (fromD) val += gridComponentAt(u_grid, idx + ivec3(0,-1, 0), u_count, u_texLength, 0);\n        if (fromF) val += gridComponentAt(u_grid, idx + ivec3(0, 0, 1), u_count, u_texLength, 0);\n        if (fromB) val += gridComponentAt(u_grid, idx + ivec3(0, 0,-1), u_count, u_texLength, 0);\n\n        if (count > 0) {\n            current.x = val / float(count);\n        }\n    }\n\n    if (\n        checkIdx(idx, yCount) &&\n        ((checkIdx(idx + ivec3(0,-1,0), tCount) &&\n        gridComponentAt(u_types, idx + ivec3(0,-1,0), u_count, u_texLength, 0) != 1.0) ||\n        (checkIdx(idx, tCount) &&\n        gridComponentAt(u_types, idx, u_count, u_texLength, 0) != 1.0))\n    ) {\n        bool fromU = (checkIdx(idx + ivec3( 1,-1, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 1,-1, 0), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3( 1, 0, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 1, 0, 0), u_count, u_texLength, 0) == 1.0);\n        bool fromD = (checkIdx(idx + ivec3(-1,-1, 0), tCount) && gridComponentAt(u_types, idx + ivec3(-1,-1, 0), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3(-1, 0, 0), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 0, 0), u_count, u_texLength, 0) == 1.0);\n        bool fromF = (checkIdx(idx + ivec3( 0,-1, 1), tCount) && gridComponentAt(u_types, idx + ivec3( 0,-1, 1), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3( 0, 0, 1), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 0, 1), u_count, u_texLength, 0) == 1.0);\n        bool fromB = (checkIdx(idx + ivec3( 0,-1,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 0,-1,-1), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3( 0, 0,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 0,-1), u_count, u_texLength, 0) == 1.0);\n        float val = 0.0;\n\n        int count = int(fromU) + int(fromD) + int(fromF) + int(fromB);\n        if (fromU) val += gridComponentAt(u_grid, idx + ivec3( 1, 0, 0), u_count, u_texLength, 1);\n        if (fromD) val += gridComponentAt(u_grid, idx + ivec3(-1, 0, 0), u_count, u_texLength, 1);\n        if (fromF) val += gridComponentAt(u_grid, idx + ivec3( 0, 0, 1), u_count, u_texLength, 1);\n        if (fromB) val += gridComponentAt(u_grid, idx + ivec3( 0, 0,-1), u_count, u_texLength, 1);\n\n        if (count > 0) {\n            current.y = val / float(count);\n        }\n    }\n\n    if (\n        checkIdx(idx, zCount) &&\n        ((checkIdx(idx + ivec3(0,0,-1), tCount) &&\n        gridComponentAt(u_types, idx + ivec3(0,0,-1), u_count, u_texLength, 0) != 1.0) ||\n        (checkIdx(idx, tCount) &&\n        gridComponentAt(u_types, idx, u_count, u_texLength, 0) != 1.0))\n    ) {\n        bool fromU = (checkIdx(idx + ivec3( 1, 0,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 1, 0,-1), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3( 1, 0, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 1, 0, 0), u_count, u_texLength, 0) == 1.0);\n        bool fromD = (checkIdx(idx + ivec3(-1, 0,-1), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 0,-1), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3(-1, 0, 0), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 0, 0), u_count, u_texLength, 0) == 1.0);\n        bool fromF = (checkIdx(idx + ivec3( 0, 1,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 1,-1), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3( 0, 1, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 1, 0), u_count, u_texLength, 0) == 1.0);\n        bool fromB = (checkIdx(idx + ivec3( 0,-1,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 0,-1,-1), u_count, u_texLength, 0) == 1.0) ||\n                     (checkIdx(idx + ivec3( 0,-1, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 0,-1, 0), u_count, u_texLength, 0) == 1.0);\n        float val = 0.0;\n\n        int count = int(fromU) + int(fromD) + int(fromF) + int(fromB);\n        if (fromU) val += gridComponentAt(u_grid, idx + ivec3( 1, 0, 0), u_count, u_texLength, 2);\n        if (fromD) val += gridComponentAt(u_grid, idx + ivec3(-1, 0, 0), u_count, u_texLength, 2);\n        if (fromF) val += gridComponentAt(u_grid, idx + ivec3( 0, 1, 0), u_count, u_texLength, 2);\n        if (fromB) val += gridComponentAt(u_grid, idx + ivec3( 0,-1, 0), u_count, u_texLength, 2);\n\n        if (count > 0) {\n            current.z = val / float(count);\n        }\n    }\n    \n    gl_FragColor = current;\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D u_grid;\r\nuniform sampler2D u_types;\r\nuniform int u_texLength;\r\nuniform vec3 u_min;\r\nuniform vec3 u_max;\r\nuniform float u_cellSize;\r\nuniform ivec3 u_count;\r\n\r\nvarying vec2 f_uv;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n    // ivec3 count = gridCount(vec3(0.5, 0.5, 0.5) * u_cellSize, u_max, u_min, u_cellSize);\r\n    // ivec3 idx = UVtoXYZ(f_uv, u_texLength, count);\r\n\r\n    vec4 current = texture2D(u_grid, f_uv);\r\n    \r\n    ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\r\n\r\n    // if (!checkIdx(idx, u_count - 1)) {\r\n    //     discard;\r\n    // }\r\n\r\n    ivec3 left = idx - ivec3(1,0,0);\r\n    ivec3 right = idx + ivec3(0,0,0);\r\n    ivec3 down = idx - ivec3(0,1,0);\r\n    ivec3 up = idx + ivec3(0,0,0);\r\n    ivec3 back = idx - ivec3(0,0,1);\r\n    ivec3 front = idx + ivec3(0,0,0);\r\n\r\n    // set adjacent to solid to 0\r\n    if (checkIdx(left, u_count - 1) && gridComponentAt(u_types, left, u_count, u_texLength, 0) == 2.0) {\r\n      current[0] = max(current[0], 0.0);\r\n    }\r\n    if (checkIdx(right, u_count - 1) && gridComponentAt(u_types, right, u_count, u_texLength, 0) == 2.0) {\r\n      current[0] = min(current[0], 0.0);\r\n    }\r\n    if (checkIdx(down, u_count - 1) && gridComponentAt(u_types, down, u_count, u_texLength, 0) == 2.0) {\r\n      current[1] = max(current[1], 0.0);\r\n    }\r\n    if (checkIdx(up, u_count - 1) && gridComponentAt(u_types, up, u_count, u_texLength, 0) == 2.0) {\r\n      current[1] = min(current[1], 0.0);\r\n    }\r\n    if (checkIdx(back, u_count - 1) && gridComponentAt(u_types, back, u_count, u_texLength, 0) == 2.0) {\r\n      current[2] = max(current[2], 0.0);\r\n    }\r\n    if (checkIdx(front, u_count - 1) && gridComponentAt(u_types, front, u_count, u_texLength, 0) == 2.0) {\r\n      current[2] = min(current[2], 0.0);\r\n    }\r\n\r\n    // clamp to bounds\r\n    // current.xyz = mix(current.xyz, clamp(current.xyz, current.xyz, vec3(0,0,0)), vec3(equal(idx, count)));\r\n    // current.xyz = mix(current.xyz, clamp(current.xyz, vec3(0,0,0), current.xyz), vec3(equal(idx, ivec3(0,0,0))));\r\n    // current.xyz = mix(current.xyz, clamp(current.xyz, current.xyz, vec3(0,0,0)), vec3(equal(idx, u_count - 1)));\r\n\r\n    if (idx.x == 0) current.x = max(0.0, current.x);\r\n    if (idx.y == 0) current.y = max(0.0, current.y);\r\n    if (idx.z == 0) current.z = max(0.0, current.z);\r\n\r\n    if (idx.x == u_count.x - 1) current.x = min(0.0, current.x);\r\n    if (idx.y == u_count.y - 1) current.y = min(0.0, current.y);\r\n    if (idx.z == u_count.z - 1) current.z = min(0.0, current.z);\r\n\r\n    gl_FragColor = current;\r\n}"
 
 /***/ },
 /* 43 */
 /***/ function(module, exports) {
 
-	module.exports = "\nattribute float v_id;\nuniform sampler2D u_particles;\nuniform sampler2D u_gA;\nuniform sampler2D u_gOld;\n\nuniform float u_cellSize;\nuniform vec3 u_min;\nuniform ivec3 u_count;\n\nuniform int u_particleTexLength;\nuniform int u_gridTexLength;\n\nuniform bool u_copy;\nuniform float u_t;\n\nvarying vec3 val;\n\n\nivec3 toXYZ(int idx, ivec3 count) {\n    int z = idx / (count.x * count.y);\n    int y = (idx - z * (count.x * count.y)) / count.x;\n    int x = idx - y * count.x - z * (count.x * count.y);\n\n    return ivec3(x,y,z);\n}\n\nint toFlat(ivec3 idx, ivec3 count) {\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\n}\n\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\n    int idx = pIdx.x + pIdx.y * texLength;\n    return toXYZ(idx, count);\n}\n\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    return texture2D(grid, gUV);\n}\n\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    for (int i = 0; i < 4; ++i) {\n        if (i == c) return texture2D(grid, gUV)[i];\n    }\n    return 0.0;\n}\n\nbool checkIdx(ivec3 idx, ivec3 count) {\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\n}\n\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\n    return (pos - min) / cellSize;\n}\n\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\n}\n\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\n    return vec3(idx)*cellSize + min;\n}\n\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\n\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\n\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nvoid main() {\n    int pIdx = int(v_id) * 2;\n    int vIdx = int(v_id) * 2 + 1;\n\n    int pV = pIdx / u_particleTexLength;\n    int pU = pIdx - pV * u_particleTexLength;\n\n    int vV = vIdx / u_particleTexLength;\n    int vU = vIdx - vV * u_particleTexLength;\n\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\n\n    vec3 pos = texture2D(u_particles, pUV).rgb;\n    vec3 vel = texture2D(u_particles, vUV).rgb;\n\n    if (u_copy) {\n        val = pos;\n        gl_Position = vec4(pUV * 2.0 - 1.0, 0.0, 1.0);\n    } else {\n\n        vec3 velA = vec3(\n            gridComponentInterpolate(u_gA, pos, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),\n            gridComponentInterpolate(u_gA, pos, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),\n            gridComponentInterpolate(u_gA, pos, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)\n        );\n        vec3 velB = vec3(\n            gridComponentInterpolate(u_gOld, pos, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),\n            gridComponentInterpolate(u_gOld, pos, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),\n            gridComponentInterpolate(u_gOld, pos, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)\n        );\n\n        velA = vec3(\n            gridComponentInterpolate(u_gA, pos + velA * u_t * 0.5, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),\n            gridComponentInterpolate(u_gA, pos + velA * u_t * 0.5, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),\n            gridComponentInterpolate(u_gA, pos + velA * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)\n        );\n        velB = vec3(\n            gridComponentInterpolate(u_gOld, pos + velB * u_t * 0.5, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),\n            gridComponentInterpolate(u_gOld, pos + velB * u_t * 0.5, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),\n            gridComponentInterpolate(u_gOld, pos + velB * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)\n        );\n\n        // val = 0.95 * (vel + (velA - velB)) + 0.05 * velA;\n        val = vel + (velA - velB);\n        gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);\n    }\n    \n    gl_PointSize = 1.0;\n}"
+	module.exports = "\r\nattribute float v_id;\r\nuniform ivec3 u_count;\r\nuniform sampler2D u_types;\r\nuniform int u_texLength;\r\nuniform float u_scale;\r\nvarying vec4 val;\r\nvarying float keep;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n  keep = 1.0;\r\n  gl_PointSize = 1.0;\r\n\r\n  int id = int(v_id);\r\n\r\n  ivec3 idx = toXYZ(id / 6, u_count);\r\n\r\n  // if (idx.x >= u_count.x - 1 || \r\n  //     idx.y >= u_count.y - 1 || \r\n  //     idx.z >= u_count.z - 1) {\r\n  //       keep = 0.0;\r\n  //       return;\r\n  //     }\r\n\r\n  int offsetID = id - (id / 6) * 6;\r\n  bool isPlusGrid = false;\r\n  int gridDir = 0;\r\n  ivec3 offset;\r\n  if (offsetID == 0) {\r\n    offset = ivec3(1,0,0);\r\n    gridDir = 0;\r\n  } else if (offsetID == 1) {\r\n    offset = ivec3(1,0,0);\r\n    gridDir = 0;\r\n    isPlusGrid = true;\r\n  } else if (offsetID == 2) {\r\n    offset = ivec3(0,1,0);\r\n    gridDir = 1;\r\n  } else if (offsetID == 3) {\r\n    offset = ivec3(0,1,0);\r\n    gridDir = 1;\r\n    isPlusGrid = true;\r\n  } else if (offsetID == 4) {\r\n    offset = ivec3(0,0,1);\r\n    gridDir = 2;\r\n  } else if (offsetID == 5) {\r\n    offset = ivec3(0,0,1);\r\n    gridDir = 2;\r\n    isPlusGrid = true;\r\n  }\r\n\r\n  float typeA = gridAt(u_types, idx, u_count, u_texLength)[0];\r\n  float typeB = gridAt(u_types, idx + offset, u_count, u_texLength)[0];\r\n  if (!checkIdx(idx + offset, u_count)) {\r\n    typeB = -1.0;\r\n    if (isPlusGrid) {\r\n      keep = 0.0;\r\n    }\r\n  }\r\n\r\n  if (isPlusGrid) {\r\n    gl_Position = vec4(XYZtoUV(idx + offset, u_texLength, u_count) * 2.0 - 1.0, 0.0, 1.0);\r\n  } else {\r\n    gl_Position = vec4(XYZtoUV(idx, u_texLength, u_count) * 2.0 - 1.0, 0.0, 1.0);\r\n  }\r\n\r\n  if (typeA == 1.0 && typeB == 1.0) {\r\n    if (isPlusGrid) {\r\n      val = vec4(0,0,0,u_scale);\r\n    } else {\r\n      val = vec4(0,0,0,u_scale);\r\n      if (gridDir == 0) {\r\n        val[0] = -u_scale;\r\n      } else if (gridDir == 1) {\r\n        val[1] = -u_scale;\r\n      } else if (gridDir == 2) {\r\n        val[2] = -u_scale;\r\n      }\r\n    }\r\n  } else if (typeA == 1.0 && typeB == 0.0) {\r\n    if (isPlusGrid) {\r\n      keep = 0.0;\r\n      return;\r\n      val = vec4(0,0,0,u_scale);\r\n    } else {\r\n      val = vec4(0,0,0,u_scale);\r\n    }\r\n  }\r\n}"
 
 /***/ },
 /* 44 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nvarying vec3 val;\n\nvoid main() {\n    gl_FragColor = vec4(val, 1.0);\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nvarying vec4 val;\r\nvarying float keep;\r\n\r\nvoid main() {\r\n  if (keep != 1.0) discard;\r\n  gl_FragColor = val;\r\n}"
 
 /***/ },
 /* 45 */
 /***/ function(module, exports) {
 
-	module.exports = "\nattribute float v_id;\nuniform sampler2D u_particles;\nuniform int u_particleTexLength;\n\nuniform bool u_copy;\nuniform float u_t;\nuniform vec3 u_min;\nuniform vec3 u_max;\n\nvarying vec3 val;\n\nivec3 toXYZ(int idx, ivec3 count) {\n    int z = idx / (count.x * count.y);\n    int y = (idx - z * (count.x * count.y)) / count.x;\n    int x = idx - y * count.x - z * (count.x * count.y);\n\n    return ivec3(x,y,z);\n}\n\nint toFlat(ivec3 idx, ivec3 count) {\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\n}\n\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\n    int idx = pIdx.x + pIdx.y * texLength;\n    return toXYZ(idx, count);\n}\n\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    return texture2D(grid, gUV);\n}\n\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\n    int flatIdx = toFlat(idx, count);\n\n    int gV = flatIdx / texLength;\n    int gU = flatIdx - gV * texLength;\n\n    vec2 gUV = (vec2(gU, gV) + 0.01) / float(texLength);\n    \n    for (int i = 0; i < 4; ++i) {\n        if (i == c) return texture2D(grid, gUV)[i];\n    }\n    return 0.0;\n}\n\nbool checkIdx(ivec3 idx, ivec3 count) {\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\n}\n\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\n    return (pos - min) / cellSize;\n}\n\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\n}\n\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\n    return vec3(idx)*cellSize + min;\n}\n\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\n\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\n    \n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\n\n    vec3 l = floor(fIdx);\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));\n\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\n\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\n\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\n\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\n}\n\nvoid main() {\n    int pIdx = int(v_id) * 2;\n    int vIdx = int(v_id) * 2 + 1;\n\n    int pV = pIdx / u_particleTexLength;\n    int pU = pIdx - pV * u_particleTexLength;\n\n    int vV = vIdx / u_particleTexLength;\n    int vU = vIdx - vV * u_particleTexLength;\n\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\n\n    vec3 pos = texture2D(u_particles, pUV).rgb;\n    vec3 vel = texture2D(u_particles, vUV).rgb;\n\n    if (u_copy) {\n        val = vel;\n        gl_Position = vec4(vUV * 2.0 - 1.0, -1.0, 1.0);\n    } else {\n        val = clamp(pos + vel * u_t, u_min, u_max);\n        gl_Position = vec4(pUV * 2.0 - 1.0, -1.0, 1.0);\n    }\n    \n    gl_PointSize = 1.0;\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform ivec3 u_count;\r\nuniform sampler2D u_types;\r\nuniform sampler2D u_A;\r\nuniform int u_texLength;\r\nuniform float u_scale;\r\nvarying vec4 val;\r\n\r\nvarying vec2 f_uv;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n  // keep = 1.0;\r\n\r\n  // int id = int(v_id);\r\n\r\n  ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\r\n  // ivec3 idx = toXYZ(id / 6, u_count);\r\n  \r\n  if (gridAt(u_types, idx, u_count, u_texLength)[0] != 1.0) {\r\n    discard;\r\n  }\r\n\r\n  if (!checkIdx(idx, u_count - 1)) discard;\r\n\r\n  // if (idx.x >= u_count.x - 1 || \r\n  //     idx.y >= u_count.y - 1 || \r\n  //     idx.z >= u_count.z - 1) {\r\n  //       discard;\r\n  //     }\r\n\r\n  vec2 pI = XYZtoUV(idx + ivec3(1,0,0), u_texLength, u_count);\r\n  vec2 pJ = XYZtoUV(idx + ivec3(0,1,0), u_texLength, u_count);\r\n  vec2 pK = XYZtoUV(idx + ivec3(0,0,1), u_texLength, u_count);\r\n\r\n  float div = -u_scale * (\r\n    texture2D(u_A, pI)[0] - texture2D(u_A, f_uv)[0] +\r\n    texture2D(u_A, pJ)[1] - texture2D(u_A, f_uv)[1] +\r\n    texture2D(u_A, pK)[2] - texture2D(u_A, f_uv)[2]\r\n  );\r\n\r\n  if (idx.x == 0) {\r\n    div -= u_scale * texture2D(u_A, f_uv)[0];\r\n  }\r\n  if (idx.x == u_count.x - 2) {\r\n    div -= u_scale * texture2D(u_A, pI)[0];\r\n  }\r\n  if (idx.y == 0) {\r\n    div -= u_scale * texture2D(u_A, f_uv)[1];\r\n  }\r\n  if (idx.y == u_count.y - 2) {\r\n    div -= u_scale * texture2D(u_A, pJ)[1];\r\n  }\r\n  if (idx.z == 0) {\r\n    div -= u_scale * texture2D(u_A, f_uv)[2];\r\n  }\r\n  if (idx.z == u_count.z - 2) {\r\n    div -= u_scale * texture2D(u_A, pK)[2];\r\n  }\r\n\r\n                  //  p   r   z  s\r\n  gl_FragColor = vec4(0, div, 0, div);\r\n  \r\n  // if (idx.x >= u_count.x - 1 || \r\n  //     idx.y >= u_count.y - 1 || \r\n  //     idx.z >= u_count.z - 1) {\r\n  //       keep = 0.0;\r\n  //       return;\r\n  //     }\r\n\r\n  // int offsetID = id - (id / 6) * 6;\r\n\r\n  // ivec3 offset;\r\n  // if (offsetID == 0) {\r\n  //   offset = ivec3(-1,0,0);\r\n  // } else if (offsetID == 1) {\r\n  //   offset = ivec3(1,0,0);\r\n  // } else if (offsetID == 2) {\r\n  //   offset = ivec3(0,-1,0);\r\n  // } else if (offsetID == 3) {\r\n  //   offset = ivec3(0,1,0);\r\n  // } else if (offsetID == 4) {\r\n  //   offset = ivec3(0,0,-1);\r\n  // } else if (offsetID == 5) {\r\n  //   offset = ivec3(0,0,1);\r\n  // }\r\n\r\n  // if (gridAt(u_types, idx + offset, u_count, u_texLength)[0] == 2.0) {\r\n\r\n  // }\r\n}"
 
 /***/ },
 /* 46 */
 /***/ function(module, exports) {
 
-	module.exports = "\nprecision highp float;\n\nvarying vec3 val;\n\nvoid main() {\n    gl_FragColor = vec4(val, 1.0);\n}"
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D u_A;\r\nuniform sampler2D u_Pre;\r\nuniform sampler2D u_types;\r\nuniform int u_texLength;\r\nuniform int u_iter;\r\nuniform ivec3 u_count;\r\n\r\nvarying vec2 f_uv;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\n#define GET(grid, uv, c) (uv.x < 0.0 ? 0.0 : texture2D(grid, uv)[c])\r\n#define Aplusi(uv) GET(u_A, uv, 0)\r\n#define Aplusj(uv) GET(u_A, uv, 1)\r\n#define Aplusk(uv) GET(u_A, uv, 2)\r\n#define Adiag(uv) GET(u_A, uv, 3)\r\n#define precon(uv) GET(u_Pre, uv, 0)\r\n\r\nvoid main() {\r\n    if (texture2D(u_types, f_uv)[0] != 1.0) discard;\r\n    ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\r\n    if (idx.x > u_iter || idx.y > u_iter || idx.z > u_iter) discard;\r\n    if (!checkIdx(idx, u_count - 1)) discard;\r\n\r\n    vec2 mI = XYZtoUV(idx - ivec3(1,0,0), u_texLength, u_count);\r\n    vec2 mJ = XYZtoUV(idx - ivec3(0,1,0), u_texLength, u_count);\r\n    vec2 mK = XYZtoUV(idx - ivec3(0,0,1), u_texLength, u_count);\r\n    if (!checkIdx(idx - ivec3(1,0,0), u_count-1)) mI[0] = -1.0;\r\n    if (!checkIdx(idx - ivec3(0,1,0), u_count-1)) mJ[0] = -1.0;\r\n    if (!checkIdx(idx - ivec3(0,0,1), u_count-1)) mK[0] = -1.0; \r\n\r\n    float diag = Adiag(f_uv);\r\n    // if (diag <= 0.0) discard;\r\n    float e = diag\r\n                  - pow(Aplusi(mI) * precon(mI), 2.0)\r\n                  - pow(Aplusj(mJ) * precon(mJ), 2.0)\r\n                  - pow(Aplusk(mK) * precon(mK), 2.0)\r\n\r\n                  - 0.97 * (\r\n                    Aplusi(mI) * (\r\n                      Aplusj(mI) + Aplusk(mI)\r\n                    ) * pow(precon(mI), 2.0) +\r\n\r\n                    Aplusj(mJ) * (\r\n                      Aplusi(mJ) + Aplusk(mJ)\r\n                    ) * pow(precon(mJ), 2.0) +\r\n\r\n                    Aplusk(mK) * (\r\n                      Aplusi(mK) + Aplusj(mK)\r\n                    ) * pow(precon(mK), 2.0)\r\n                  )\r\n                  ;\r\n  if (e < 0.25 * diag) {\r\n    e = diag;\r\n  }\r\n  e = 1.0 / sqrt(e);\r\n  gl_FragColor = vec4(e, e, e, 1.0);\r\n}"
 
 /***/ },
 /* 47 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ function(module, exports) {
 
-	module.exports = __webpack_require__(48)
-	module.exports.color = __webpack_require__(49)
+	module.exports = "\r\nprecision highp float;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nuniform ivec3 u_count;\r\nuniform sampler2D u_A;\r\nuniform sampler2D u_pre;\r\nuniform sampler2D u_types;\r\nuniform sampler2D u_pcg;\r\nuniform sampler2D u_q;\r\nuniform int u_texLength;\r\n\r\nuniform int u_step;\r\nuniform int u_iter;\r\nuniform bool u_setS;\r\n\r\nvarying vec2 f_uv;\r\n\r\nvarying vec4 val;\r\n\r\n#define GET(grid, uv, c) (uv.x < 0.0 ? 0.0 : texture2D(grid, uv)[c])\r\n#define Aplusi(uv) GET(u_A, uv, 0)\r\n#define Aplusj(uv) GET(u_A, uv, 1)\r\n#define Aplusk(uv) GET(u_A, uv, 2)\r\n#define Adiag(uv) GET(u_A, uv, 3)\r\n#define precon(uv) GET(u_pre, uv, 0)\r\n\r\nvoid main() {\r\n  ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\r\n  if (!checkIdx(idx, u_count - 1)) discard;\r\n  if (texture2D(u_types, f_uv)[0] != 1.0) discard;\r\n\r\n  vec2 mI = XYZtoUV(idx - ivec3(1,0,0), u_texLength, u_count);\r\n  vec2 mJ = XYZtoUV(idx - ivec3(0,1,0), u_texLength, u_count);\r\n  vec2 mK = XYZtoUV(idx - ivec3(0,0,1), u_texLength, u_count);\r\n  vec2 pI = XYZtoUV(idx + ivec3(1,0,0), u_texLength, u_count);\r\n  vec2 pJ = XYZtoUV(idx + ivec3(0,1,0), u_texLength, u_count);\r\n  vec2 pK = XYZtoUV(idx + ivec3(0,0,1), u_texLength, u_count);\r\n\r\n  if (!checkIdx(idx - ivec3(1,0,0), u_count-1)) mI[0] = -1.0;\r\n  if (!checkIdx(idx - ivec3(0,1,0), u_count-1)) mJ[0] = -1.0;\r\n  if (!checkIdx(idx - ivec3(0,0,1), u_count-1)) mK[0] = -1.0; \r\n  if (!checkIdx(idx + ivec3(1,0,0), u_count-1)) pI[0] = -1.0;\r\n  if (!checkIdx(idx + ivec3(0,1,0), u_count-1)) pJ[0] = -1.0;\r\n  if (!checkIdx(idx + ivec3(0,0,1), u_count-1)) pK[0] = -1.0; \r\n\r\n  // int greatestIdx = int(max(max(float(idx.x), float(idx.y)), float(idx.z)));\r\n  // int smallestIdx = int(min(min(float(idx.x), float(idx.y)), float(idx.z)));\r\n\r\n  vec4 curr;\r\n  if (u_step == 0) {\r\n    curr = texture2D(u_q, f_uv);\r\n    // if (u_iter == greatestIdx) {\r\n    if (idx.x <= u_iter && idx.y <= u_iter && idx.z <= u_iter) {\r\n      float t = texture2D(u_pcg, f_uv)[1]\r\n        - Aplusi(mI) * precon(mI) * GET(u_q, mI, 0)\r\n        - Aplusj(mJ) * precon(mJ) * GET(u_q, mJ, 0)\r\n        - Aplusk(mK) * precon(mK) * GET(u_q, mK, 0);\r\n      curr[0] = t * precon(f_uv);\r\n    }\r\n\r\n  } else if (u_step == 1) {\r\n    curr = texture2D(u_pcg, f_uv);\r\n    // if (u_iter == smallestIdx) {\r\n    if (idx.x >= u_iter && idx.y >= u_iter && idx.z >= u_iter) {\r\n      float t = texture2D(u_q, f_uv)[0]\r\n        - Aplusi(f_uv) * precon(f_uv) * GET(u_pcg, pI, 2)\r\n        - Aplusj(f_uv) * precon(f_uv) * GET(u_pcg, pJ, 2)\r\n        - Aplusk(f_uv) * precon(f_uv) * GET(u_pcg, pK, 2);\r\n      curr[2] = t * precon(f_uv);\r\n      if (u_setS) curr[3] = curr[2];\r\n    }\r\n  }\r\n\r\n  gl_FragColor = curr;\r\n}"
 
 /***/ },
 /* 48 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nattribute float v_id;\r\nuniform ivec3 u_count;\r\nuniform int u_texLength;\r\nuniform sampler2D u_pcg;\r\nvarying vec4 val;\r\nvarying float keep;\r\nuniform bool u_preconditioned;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n  gl_PointSize = 1.0;\r\n\r\n  int id = int(v_id);\r\n\r\n  ivec3 idx = toXYZ(id, u_count);\r\n\r\n  vec4 texVal = texture2D(u_pcg, XYZtoUV(idx, u_texLength, u_count));\r\n\r\n  keep = 1.0;\r\n\r\n  if (u_preconditioned) {\r\n    texVal[0] = texVal[1] * texVal[2];\r\n  } else {\r\n    texVal[0] = texVal[1] * texVal[1];\r\n  }\r\n  \r\n  val = texVal;\r\n\r\n  if (!checkIdx(idx, u_count-1)) val = vec4(0);\r\n\r\n  gl_Position = vec4(0,0,0,1);\r\n}"
+
+/***/ },
+/* 49 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D u_A;\r\nuniform sampler2D u_types;\r\nuniform sampler2D u_pcg;\r\nuniform ivec3 u_count;\r\nuniform int u_texLength;\r\nuniform float u_scale;\r\n\r\nvarying vec2 f_uv;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\n#define GET(grid, uv, c) (texture2D(grid, uv)[c])\r\n#define Aplusi(uv) GET(u_A, uv, 0)\r\n#define Aplusj(uv) GET(u_A, uv, 1)\r\n#define Aplusk(uv) GET(u_A, uv, 2)\r\n#define Adiag(uv) GET(u_A, uv, 3)\r\n\r\nvoid main() {\r\n  ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\r\n  if (!checkIdx(idx, u_count - 1)) discard;\r\n  vec4 curr = texture2D(u_pcg, f_uv);\r\n\r\n  ivec3 mIi = idx - ivec3(1,0,0);\r\n  ivec3 mJi = idx - ivec3(0,1,0);\r\n  ivec3 mKi = idx - ivec3(0,0,1);\r\n  ivec3 pIi = idx + ivec3(1,0,0);\r\n  ivec3 pJi = idx + ivec3(0,1,0);\r\n  ivec3 pKi = idx + ivec3(0,0,1);\r\n\r\n  vec2 mI = XYZtoUV(mIi, u_texLength, u_count);\r\n  vec2 mJ = XYZtoUV(mJi, u_texLength, u_count);\r\n  vec2 mK = XYZtoUV(mKi, u_texLength, u_count);\r\n  vec2 pI = XYZtoUV(pIi, u_texLength, u_count);\r\n  vec2 pJ = XYZtoUV(pJi, u_texLength, u_count);\r\n  vec2 pK = XYZtoUV(pKi, u_texLength, u_count);\r\n\r\n  float val = 0.0;\r\n  if (checkIdx(mIi, u_count - 1)) {\r\n    val += Aplusi(mI) * GET(u_pcg, mI, 3);\r\n  }\r\n  if (checkIdx(mJi, u_count - 1)) {\r\n    val += Aplusj(mJ) * GET(u_pcg, mJ, 3);\r\n  }\r\n  if (checkIdx(mKi, u_count - 1)) {\r\n    val += Aplusk(mK) * GET(u_pcg, mK, 3);\r\n  }\r\n  val += Adiag(f_uv) * GET(u_pcg, f_uv, 3);\r\n  if (checkIdx(pIi, u_count - 1)) {\r\n    val += Aplusi(f_uv) * GET(u_pcg, pI, 3);\r\n  }\r\n  if (checkIdx(pJi, u_count - 1)) {\r\n    val += Aplusj(f_uv) * GET(u_pcg, pJ, 3);\r\n  }\r\n  if (checkIdx(pKi, u_count - 1)) {\r\n    val += Aplusk(f_uv) * GET(u_pcg, pK, 3);\r\n  }\r\n\r\n  curr[2] = u_scale * val;\r\n  gl_FragColor = curr;\r\n}\r\n\r\n// void main() {\r\n//   ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\r\n\r\n//   if (!checkIdx(idx, u_count - 1)) discard;\r\n\r\n//   vec4 curr = texture2D(u_pcg, f_uv);\r\n\r\n//   if (texture2D(u_types, f_uv)[0] != 1.0) {\r\n//     curr[2] = 0.0;\r\n//     gl_FragColor = curr;\r\n//     return; \r\n//   }\r\n\r\n//   ivec3 mIi = clampIdx(idx - ivec3(1,0,0), ivec3(0,0,0), u_count - 2);\r\n//   ivec3 mJi = clampIdx(idx - ivec3(0,1,0), ivec3(0,0,0), u_count - 2);\r\n//   ivec3 mKi = clampIdx(idx - ivec3(0,0,1), ivec3(0,0,0), u_count - 2);\r\n//   ivec3 pIi = clampIdx(idx + ivec3(1,0,0), ivec3(0,0,0), u_count - 2);\r\n//   ivec3 pJi = clampIdx(idx + ivec3(0,1,0), ivec3(0,0,0), u_count - 2);\r\n//   ivec3 pKi = clampIdx(idx + ivec3(0,0,1), ivec3(0,0,0), u_count - 2);\r\n\r\n//   vec2 mI = XYZtoUV(mIi, u_texLength, u_count);\r\n//   vec2 mJ = XYZtoUV(mJi, u_texLength, u_count);\r\n//   vec2 mK = XYZtoUV(mKi, u_texLength, u_count);\r\n//   vec2 pI = XYZtoUV(pIi, u_texLength, u_count);\r\n//   vec2 pJ = XYZtoUV(pJi, u_texLength, u_count);\r\n//   vec2 pK = XYZtoUV(pKi, u_texLength, u_count);\r\n\r\n//   float mIt = texture2D(u_types, mI)[0];\r\n//   float mJt = texture2D(u_types, mJ)[0];\r\n//   float mKt = texture2D(u_types, mK)[0];\r\n//   float pIt = texture2D(u_types, pI)[0];\r\n//   float pJt = texture2D(u_types, pJ)[0];\r\n//   float pKt = texture2D(u_types, pK)[0];\r\n\r\n//   float val = 0.0;\r\n//   int nonsolid = 6;\r\n\r\n//   if (mIt == 1.0) {\r\n//     val -= texture2D(u_types, mI)[3];\r\n//   } else if (mIt == 2.0) {\r\n//     nonsolid--;\r\n//   }\r\n\r\n//   if (mJt == 1.0) {\r\n//     val -= texture2D(u_types, mJ)[3];\r\n//   } else if (mJt == 2.0) {\r\n//     nonsolid--;\r\n//   }\r\n\r\n//   if (mKt == 1.0) {\r\n//     val -= texture2D(u_types, mK)[3];\r\n//   } else if (mKt == 2.0) {\r\n//     nonsolid--;\r\n//   }\r\n\r\n//   if (pIt == 1.0) {\r\n//     val -= texture2D(u_types, pI)[3];\r\n//   } else if (pIt == 2.0) {\r\n//     nonsolid--;\r\n//   }\r\n\r\n//   if (pJt == 1.0) {\r\n//     val -= texture2D(u_types, pJ)[3];\r\n//   } else if (pJt == 2.0) {\r\n//     nonsolid--;\r\n//   }\r\n\r\n//   if (pKt == 1.0) {\r\n//     val -= texture2D(u_types, pK)[3];\r\n//   } else if (pKt == 2.0) {\r\n//     nonsolid--;\r\n//   }\r\n\r\n//   val += float(nonsolid) * curr[3];\r\n\r\n//   curr[2] = u_scale * val;\r\n//   gl_FragColor = curr;\r\n// }"
+
+/***/ },
+/* 50 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D u_pcg;\r\n\r\nvarying vec2 f_uv;\r\n\r\nvoid main() {\r\n  vec4 val = texture2D(u_pcg, f_uv);\r\n  val[2] = 0.0;\r\n  gl_FragColor = val;\r\n}"
+
+/***/ },
+/* 51 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nattribute float v_id;\r\nuniform ivec3 u_count;\r\nuniform int u_texLength;\r\nuniform float u_scale;\r\nuniform sampler2D u_A;\r\nuniform sampler2D u_pcg;\r\nvarying vec4 val;\r\nvarying float keep;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\n#define GET(grid, uv, c) (texture2D(grid, uv)[c])\r\n#define Aplusi(uv) GET(u_A, uv, 0)\r\n#define Aplusj(uv) GET(u_A, uv, 1)\r\n#define Aplusk(uv) GET(u_A, uv, 2)\r\n#define Adiag(uv) GET(u_A, uv, 3)\r\n\r\nvoid main() {\r\n  gl_PointSize = 1.0;\r\n  keep = 1.0;\r\n\r\n  int id = int(v_id);\r\n\r\n  ivec3 idx = toXYZ(id / 7, u_count);\r\n  vec2 uv = XYZtoUV(idx, u_texLength, u_count);\r\n\r\n  float s = texture2D(u_pcg, uv)[3];\r\n\r\n  int t = id - (id / 7) * 7;\r\n\r\n  // gl_Position = vec4(uv * 2.0 - 1.0, 0.0, 1.0);\r\n  \r\n  // take the current item at index i in s and\r\n\r\n  // idx is the s index\r\n\r\n  ivec3 tgtIdx;\r\n  if (t == 0) {\r\n    tgtIdx = idx + ivec3(1,0,0);\r\n  } else if (t == 1) {\r\n    tgtIdx = idx + ivec3(0,1,0);\r\n  } else if (t == 2) {\r\n    tgtIdx = idx + ivec3(0,0,1);\r\n  } else if (t == 3) {\r\n    tgtIdx = idx;\r\n  } else if (t == 4) {\r\n    tgtIdx = idx - ivec3(1,0,0);\r\n  } else if (t == 5) {\r\n    tgtIdx = idx - ivec3(0,1,0);\r\n  } else if (t == 6) {\r\n    tgtIdx = idx - ivec3(0,0,1);\r\n  }\r\n\r\n  vec2 tgt = XYZtoUV(tgtIdx, u_texLength, u_count);\r\n  vec2 mI = XYZtoUV(tgtIdx - ivec3(1,0,0), u_texLength, u_count);\r\n  vec2 mJ = XYZtoUV(tgtIdx - ivec3(0,1,0), u_texLength, u_count);\r\n  vec2 mK = XYZtoUV(tgtIdx - ivec3(0,0,1), u_texLength, u_count);\r\n  // vec2 pI = XYZtoUV(tgtIdx + ivec3(1,0,0), u_texLength, u_count);\r\n  // vec2 pJ = XYZtoUV(tgtIdx + ivec3(0,1,0), u_texLength, u_count);\r\n  // vec2 pK = XYZtoUV(tgtIdx + ivec3(0,0,1), u_texLength, u_count);\r\n\r\n  float v;\r\n  if (t == 0) {\r\n    v = Aplusi(uv) * s;\r\n    // if (!checkIdx(tgtIdx, u_count - 1)) keep = 0.0;\r\n  } else if (t == 1) {\r\n    v = Aplusj(uv) * s;\r\n    // if (!checkIdx(tgtIdx, u_count - 1)) keep = 0.0;\r\n  } else if (t == 2) {\r\n    v = Aplusk(uv) * s;\r\n    // if (!checkIdx(tgtIdx, u_count - 1)) keep = 0.0;\r\n  } else if (t == 3) {\r\n    v = Adiag(uv) * s;\r\n    // if (!checkIdx(tgtIdx, u_count - 1)) keep = 0.0;\r\n  } else if (t == 4) {\r\n    v = Aplusi(tgt) * s;\r\n    // if (!checkIdx(tgtIdx - ivec3(1,0,0), u_count - 1)) v = 0.0;\r\n  } else if (t == 5) {\r\n    v = Aplusj(tgt) * s;\r\n    // if (!checkIdx(tgtIdx - ivec3(0,1,0), u_count - 1)) v = 0.0;\r\n  } else if (t == 6) {\r\n    v = Aplusk(tgt) * s;\r\n    // if (!checkIdx(tgtIdx - ivec3(0,0,1), u_count - 1)) v = 0.0;\r\n  }\r\n\r\n  //val = texture2D(u_pcg, tgt) / 7.0;\r\n\r\n  if (!checkIdx(tgtIdx, u_count - 1)) {\r\n    keep = 0.0;\r\n    //val[2] = 0.0;\r\n    val = vec4(0,0,0,0);\r\n  } else {\r\n    // val[2] = v;\r\n    val = vec4(0, 0, u_scale * v, 0);\r\n  }\r\n\r\n  gl_Position = vec4(tgt * 2.0 - 1.0, 0.0, 1.0);\r\n  \r\n  // ivec3 tgtIdx;\r\n  // float v;\r\n  // if (t == 0) {\r\n  //   tgtIdx = idx + ivec3(1,0,0);\r\n  //   v = texture2D(u_A, uv)[0] * s;\r\n  // } else if (t == 1) {\r\n  //   tgtIdx = idx + ivec3(0,1,0);\r\n  //   v = texture2D(u_A, uv)[1] * s;\r\n  // } else if (t == 2) {\r\n  //   tgtIdx = idx + ivec3(0,0,1);\r\n  //   v = texture2D(u_A, uv)[2] * s;\r\n  // } else if (t == 3) {\r\n  //   tgtIdx = idx;\r\n  //   v = texture2D(u_A, uv)[3] * s;\r\n  // } else if (t == 4) {\r\n  //   tgtIdx = idx;\r\n  //   v = texture2D(u_A, XYZtoUV(idx - ivec3(1,0,0), u_texLength, u_count))[0] * s;\r\n  //   if (!checkIdx(idx - ivec3(1,0,0), u_count - 1)) v = 0.0;\r\n  // } else if (t == 5) {\r\n  //   tgtIdx = idx;\r\n  //   v = texture2D(u_A, XYZtoUV(idx - ivec3(0,1,0), u_texLength, u_count))[1] * s;\r\n  //   if (!checkIdx(idx - ivec3(0,1,0), u_count - 1)) v = 0.0;\r\n  // } else if (t == 6) {\r\n  //   tgtIdx = idx;\r\n  //   v = texture2D(u_A, XYZtoUV(idx - ivec3(0,0,1), u_texLength, u_count))[2] * s;\r\n  //   if (!checkIdx(idx - ivec3(0,0,1), u_count - 1)) v = 0.0;\r\n  // }\r\n\r\n  // val = texture2D(u_pcg, XYZtoUV(tgtIdx, u_texLength, u_count)) / 4.0;\r\n  // val[2] = v;\r\n\r\n  // if(!checkIdx(tgtIdx, u_count - 1) || !checkIdx(idx, u_count - 1)) {\r\n  //   val[2] = 0.0;\r\n  // }\r\n\r\n  // gl_Position = vec4(XYZtoUV(tgtIdx, u_texLength, u_count) * 2.0 - 1.0, 0.0, 1.0);\r\n}"
+
+/***/ },
+/* 52 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nattribute float v_id;\r\nuniform ivec3 u_count;\r\nuniform int u_texLength;\r\nuniform sampler2D u_pcg;\r\nvarying vec4 val;\r\nvarying float keep;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n  gl_PointSize = 1.0;\r\n\r\n  int id = int(v_id);\r\n\r\n  ivec3 idx = toXYZ(id, u_count);\r\n\r\n  vec4 texVal = texture2D(u_pcg, XYZtoUV(idx, u_texLength, u_count));\r\n\r\n  keep = 1.0;\r\n  // val = vec4(vec3(texVal[1]), 1);\r\n  // val = vec4(2);\r\n  texVal[0] = texVal[2] * texVal[3];\r\n  val = texVal;\r\n\r\n  if (!checkIdx(idx, u_count-1)) val = vec4(0);\r\n\r\n  gl_Position = vec4(0,0,0,1);\r\n}"
+
+/***/ },
+/* 53 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D u_pcg;\r\nuniform sampler2D u_const;\r\nuniform int u_texLength;\r\nuniform ivec3 u_count;\r\nuniform float u_alpha;\r\n\r\nvarying vec2 f_uv;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n  vec4 curr = texture2D(u_pcg, f_uv);\r\n\r\n  float sigma = texture2D(u_const, vec2(0,0))[0];\r\n  float zdots = texture2D(u_const, vec2(1,0))[0];\r\n  float alpha = sigma / zdots;\r\n\r\n  if (((zdots <= 0.0 || 0.0 <= zdots) ? false : true)) alpha = 0.0;\r\n\r\n  curr[0] += alpha*curr[3];\r\n  curr[1] -= alpha*curr[2];\r\n\r\n  // curr[0] += u_alpha*curr[3];\r\n  // curr[1] -= u_alpha*curr[2];\r\n\r\n  gl_FragColor = curr;\r\n}"
+
+/***/ },
+/* 54 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D u_pcg;\r\nuniform sampler2D u_const;\r\nuniform int u_texLength;\r\nuniform ivec3 u_count;\r\nuniform float u_beta;\r\n\r\nvarying vec2 f_uv;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n  vec4 curr = texture2D(u_pcg, f_uv);\r\n\r\n  float sigmanew = texture2D(u_const, vec2(0,1))[0];\r\n  float sigma = texture2D(u_const, vec2(0,0))[0];\r\n  float beta = sigmanew / sigma;\r\n\r\n  if (((sigma <= 0.0 || 0.0 <= sigma) ? false : true)) beta = 0.0;\r\n\r\n  curr[3] = curr[2] + beta*curr[3];\r\n  // curr[3] = curr[2] + u_beta*curr[3];\r\n\r\n  gl_FragColor = curr;\r\n}"
+
+/***/ },
+/* 55 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D u_grid;\r\nuniform sampler2D u_types;\r\nuniform sampler2D u_pcg;\r\n\r\nuniform float u_scale;\r\nuniform int u_texLength;\r\nuniform ivec3 u_count;\r\n\r\nvarying vec2 f_uv;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\n#define CHECK_FLUID(offset) (checkIdx(idx + offset, u_count - 1) && texture2D(u_types, XYZtoUV(idx + offset, u_texLength, u_count))[0] == 1.0)\r\n\r\nvoid main() {\r\n  ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\r\n\r\n  vec4 current = texture2D(u_grid, f_uv);\r\n\r\n  // if (!checkIdx(idx, u_count - 1)) {\r\n  //   gl_FragColor = current; \r\n  //   return;\r\n  // }\r\n\r\n  bool leftFluid = CHECK_FLUID(ivec3(-1,0,0));\r\n  bool rightFluid = CHECK_FLUID(ivec3(0,0,0));\r\n  bool downFluid = CHECK_FLUID(ivec3(0,-1,0));\r\n  bool upFluid = CHECK_FLUID(ivec3(0,0,0));\r\n  bool backFluid = CHECK_FLUID(ivec3(0,0,-1));\r\n  bool frontFluid = CHECK_FLUID(ivec3(0,0,0));\r\n\r\n  if (leftFluid || rightFluid) {\r\n    current[0] -= u_scale * (\r\n      texture2D(u_pcg, XYZtoUV(idx, u_texLength, u_count))[0] -\r\n      texture2D(u_pcg, XYZtoUV(idx - ivec3(1,0,0), u_texLength, u_count))[0]\r\n    );\r\n  }\r\n\r\n  if (downFluid || upFluid) {\r\n    current[1] -= u_scale * (\r\n      texture2D(u_pcg, XYZtoUV(idx, u_texLength, u_count))[0] -\r\n      texture2D(u_pcg, XYZtoUV(idx - ivec3(0,1,0), u_texLength, u_count))[0]\r\n    );\r\n  }\r\n\r\n  if (backFluid || frontFluid) {\r\n    current[2] -= u_scale * (\r\n      texture2D(u_pcg, XYZtoUV(idx, u_texLength, u_count))[0] -\r\n      texture2D(u_pcg, XYZtoUV(idx - ivec3(0,0,1), u_texLength, u_count))[0]\r\n    );\r\n  }\r\n\r\n  gl_FragColor = current;\r\n}"
+
+/***/ },
+/* 56 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nprecision highp float;\r\n\r\nuniform sampler2D u_grid;\r\nuniform sampler2D u_types;\r\nuniform int u_texLength;\r\nuniform float u_cellSize;\r\nuniform ivec3 u_count;\r\n\r\nvarying vec2 f_uv;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n    ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);\r\n\r\n    if (!checkIdx(idx, u_count)) {\r\n        discard;\r\n    }\r\n\r\n    vec4 current = texture2D(u_grid, f_uv);\r\n\r\n    ivec3 tCount = u_count - ivec3(1,1,1);\r\n    ivec3 xCount = u_count - ivec3(0,1,1);\r\n    ivec3 yCount = u_count - ivec3(1,0,1);\r\n    ivec3 zCount = u_count - ivec3(1,1,0);\r\n\r\n    if (\r\n        checkIdx(idx, xCount) &&\r\n        ((checkIdx(idx + ivec3(-1,0,0), tCount) &&\r\n        gridComponentAt(u_types, idx + ivec3(-1,0,0), u_count, u_texLength, 0) != 1.0) ||\r\n        (checkIdx(idx, tCount) &&\r\n        gridComponentAt(u_types, idx, u_count, u_texLength, 0) != 1.0))\r\n    ) {\r\n        bool fromU = (checkIdx(idx + ivec3(-1, 1, 0), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 1, 0), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3( 0, 1, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 1, 0), u_count, u_texLength, 0) == 1.0);\r\n        bool fromD = (checkIdx(idx + ivec3(-1,-1, 0), tCount) && gridComponentAt(u_types, idx + ivec3(-1,-1, 0), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3( 0,-1, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 0,-1, 0), u_count, u_texLength, 0) == 1.0);\r\n        bool fromF = (checkIdx(idx + ivec3(-1, 0, 1), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 0, 1), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3( 0, 0, 1), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 0, 1), u_count, u_texLength, 0) == 1.0);\r\n        bool fromB = (checkIdx(idx + ivec3(-1, 0,-1), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 0,-1), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3( 0, 0,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 0,-1), u_count, u_texLength, 0) == 1.0);\r\n        float val = 0.0;\r\n\r\n        int count = int(fromU) + int(fromD) + int(fromF) + int(fromB);\r\n        if (fromU) val += gridComponentAt(u_grid, idx + ivec3(0, 1, 0), u_count, u_texLength, 0);\r\n        if (fromD) val += gridComponentAt(u_grid, idx + ivec3(0,-1, 0), u_count, u_texLength, 0);\r\n        if (fromF) val += gridComponentAt(u_grid, idx + ivec3(0, 0, 1), u_count, u_texLength, 0);\r\n        if (fromB) val += gridComponentAt(u_grid, idx + ivec3(0, 0,-1), u_count, u_texLength, 0);\r\n\r\n        if (count > 0) {\r\n            current.x = val / float(count);\r\n        }\r\n    }\r\n\r\n    if (\r\n        checkIdx(idx, yCount) &&\r\n        ((checkIdx(idx + ivec3(0,-1,0), tCount) &&\r\n        gridComponentAt(u_types, idx + ivec3(0,-1,0), u_count, u_texLength, 0) != 1.0) ||\r\n        (checkIdx(idx, tCount) &&\r\n        gridComponentAt(u_types, idx, u_count, u_texLength, 0) != 1.0))\r\n    ) {\r\n        bool fromU = (checkIdx(idx + ivec3( 1,-1, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 1,-1, 0), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3( 1, 0, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 1, 0, 0), u_count, u_texLength, 0) == 1.0);\r\n        bool fromD = (checkIdx(idx + ivec3(-1,-1, 0), tCount) && gridComponentAt(u_types, idx + ivec3(-1,-1, 0), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3(-1, 0, 0), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 0, 0), u_count, u_texLength, 0) == 1.0);\r\n        bool fromF = (checkIdx(idx + ivec3( 0,-1, 1), tCount) && gridComponentAt(u_types, idx + ivec3( 0,-1, 1), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3( 0, 0, 1), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 0, 1), u_count, u_texLength, 0) == 1.0);\r\n        bool fromB = (checkIdx(idx + ivec3( 0,-1,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 0,-1,-1), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3( 0, 0,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 0,-1), u_count, u_texLength, 0) == 1.0);\r\n        float val = 0.0;\r\n\r\n        int count = int(fromU) + int(fromD) + int(fromF) + int(fromB);\r\n        if (fromU) val += gridComponentAt(u_grid, idx + ivec3( 1, 0, 0), u_count, u_texLength, 1);\r\n        if (fromD) val += gridComponentAt(u_grid, idx + ivec3(-1, 0, 0), u_count, u_texLength, 1);\r\n        if (fromF) val += gridComponentAt(u_grid, idx + ivec3( 0, 0, 1), u_count, u_texLength, 1);\r\n        if (fromB) val += gridComponentAt(u_grid, idx + ivec3( 0, 0,-1), u_count, u_texLength, 1);\r\n\r\n        if (count > 0) {\r\n            current.y = val / float(count);\r\n        }\r\n    }\r\n\r\n    if (\r\n        checkIdx(idx, zCount) &&\r\n        ((checkIdx(idx + ivec3(0,0,-1), tCount) &&\r\n        gridComponentAt(u_types, idx + ivec3(0,0,-1), u_count, u_texLength, 0) != 1.0) ||\r\n        (checkIdx(idx, tCount) &&\r\n        gridComponentAt(u_types, idx, u_count, u_texLength, 0) != 1.0))\r\n    ) {\r\n        bool fromU = (checkIdx(idx + ivec3( 1, 0,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 1, 0,-1), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3( 1, 0, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 1, 0, 0), u_count, u_texLength, 0) == 1.0);\r\n        bool fromD = (checkIdx(idx + ivec3(-1, 0,-1), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 0,-1), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3(-1, 0, 0), tCount) && gridComponentAt(u_types, idx + ivec3(-1, 0, 0), u_count, u_texLength, 0) == 1.0);\r\n        bool fromF = (checkIdx(idx + ivec3( 0, 1,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 1,-1), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3( 0, 1, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 0, 1, 0), u_count, u_texLength, 0) == 1.0);\r\n        bool fromB = (checkIdx(idx + ivec3( 0,-1,-1), tCount) && gridComponentAt(u_types, idx + ivec3( 0,-1,-1), u_count, u_texLength, 0) == 1.0) ||\r\n                     (checkIdx(idx + ivec3( 0,-1, 0), tCount) && gridComponentAt(u_types, idx + ivec3( 0,-1, 0), u_count, u_texLength, 0) == 1.0);\r\n        float val = 0.0;\r\n\r\n        int count = int(fromU) + int(fromD) + int(fromF) + int(fromB);\r\n        if (fromU) val += gridComponentAt(u_grid, idx + ivec3( 1, 0, 0), u_count, u_texLength, 2);\r\n        if (fromD) val += gridComponentAt(u_grid, idx + ivec3(-1, 0, 0), u_count, u_texLength, 2);\r\n        if (fromF) val += gridComponentAt(u_grid, idx + ivec3( 0, 1, 0), u_count, u_texLength, 2);\r\n        if (fromB) val += gridComponentAt(u_grid, idx + ivec3( 0,-1, 0), u_count, u_texLength, 2);\r\n\r\n        if (count > 0) {\r\n            current.z = val / float(count);\r\n        }\r\n    }\r\n    \r\n    gl_FragColor = current;\r\n}"
+
+/***/ },
+/* 57 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nattribute float v_id;\r\nuniform sampler2D u_particles;\r\nuniform sampler2D u_gA;\r\nuniform sampler2D u_gOld;\r\n\r\nuniform float u_cellSize;\r\nuniform vec3 u_min;\r\nuniform ivec3 u_count;\r\n\r\nuniform int u_particleTexLength;\r\nuniform int u_gridTexLength;\r\n\r\nuniform bool u_copy;\r\nuniform float u_t;\r\n\r\nvarying vec3 val;\r\n\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n    int pIdx = int(v_id) * 2;\r\n    int vIdx = int(v_id) * 2 + 1;\r\n\r\n    int pV = pIdx / u_particleTexLength;\r\n    int pU = pIdx - pV * u_particleTexLength;\r\n\r\n    int vV = vIdx / u_particleTexLength;\r\n    int vU = vIdx - vV * u_particleTexLength;\r\n\r\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\r\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\r\n\r\n    vec3 pos = texture2D(u_particles, pUV).rgb;\r\n    vec3 vel = texture2D(u_particles, vUV).rgb;\r\n\r\n    if (u_copy) {\r\n        val = pos;\r\n        gl_Position = vec4(pUV * 2.0 - 1.0, 0.0, 1.0);\r\n    } else {\r\n\r\n        vec3 velA = vec3(\r\n            gridComponentInterpolate(u_gA, pos, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),\r\n            gridComponentInterpolate(u_gA, pos, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),\r\n            gridComponentInterpolate(u_gA, pos, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)\r\n        );\r\n        vec3 velB = vec3(\r\n            gridComponentInterpolate(u_gOld, pos, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),\r\n            gridComponentInterpolate(u_gOld, pos, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),\r\n            gridComponentInterpolate(u_gOld, pos, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)\r\n        );\r\n\r\n        velA = vec3(\r\n            gridComponentInterpolate(u_gA, pos + velA * u_t * 0.5, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),\r\n            gridComponentInterpolate(u_gA, pos + velA * u_t * 0.5, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),\r\n            gridComponentInterpolate(u_gA, pos + velA * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)\r\n        );\r\n        velB = vec3(\r\n            gridComponentInterpolate(u_gOld, pos + velB * u_t * 0.5, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),\r\n            gridComponentInterpolate(u_gOld, pos + velB * u_t * 0.5, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),\r\n            gridComponentInterpolate(u_gOld, pos + velB * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)\r\n        );\r\n\r\n        val = 0.97 * (vel + (velA - velB)) + 0.03 * velA;\r\n        // val = vel + (velA - velB);\r\n        gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);\r\n    }\r\n    \r\n    gl_PointSize = 1.0;\r\n}"
+
+/***/ },
+/* 58 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nprecision highp float;\r\n\r\nvarying vec3 val;\r\n\r\nvoid main() {\r\n    gl_FragColor = vec4(val, 1.0);\r\n}"
+
+/***/ },
+/* 59 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nattribute float v_id;\r\nuniform sampler2D u_particles;\r\nuniform int u_particleTexLength;\r\n\r\nuniform bool u_copy;\r\nuniform float u_t;\r\nuniform vec3 u_min;\r\nuniform vec3 u_max;\r\n\r\nvarying vec3 val;\r\n\r\nivec3 toXYZ(int idx, ivec3 count) {\r\n    int z = idx / (count.x * count.y);\r\n    int y = (idx - z * (count.x * count.y)) / count.x;\r\n    int x = idx - y * count.x - z * (count.x * count.y);\r\n\r\n    return ivec3(x,y,z);\r\n}\r\n\r\nint toFlat(ivec3 idx, ivec3 count) {\r\n    return idx.x + idx.y * count.x + idx.z * count.x * count.y;\r\n}\r\n\r\nivec3 UVtoXYZ(vec2 uv, int texLength, ivec3 count) {\r\n    ivec2 pIdx = ivec2(floor(float(texLength) * uv));\r\n    int idx = pIdx.x + pIdx.y * texLength;\r\n    return toXYZ(idx, count);\r\n}\r\n\r\nvec2 XYZtoUV(ivec3 idx, int texLength, ivec3 count) {\r\n    int i = toFlat(idx, count);\r\n    int v = i / texLength;\r\n    int u = i - v * texLength;\r\n    return (vec2(u, v) + 0.01) / float(texLength);\r\n}\r\n\r\nvec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    return texture2D(grid, uv);\r\n}\r\n\r\nfloat gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {\r\n    vec2 uv = XYZtoUV(idx, texLength, count);\r\n    \r\n    for (int i = 0; i < 4; ++i) {\r\n        if (i == c) return texture2D(grid, uv)[i];\r\n    }\r\n    return 0.0;\r\n}\r\n\r\nbool checkIdx(ivec3 idx, ivec3 count) {\r\n    return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));\r\n}\r\n\r\nivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {\r\n    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));\r\n}\r\n\r\nvec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return (pos - min) / cellSize;\r\n}\r\n\r\nivec3 indexOf(vec3 pos, vec3 min, float cellSize) {\r\n    return ivec3(floor(fractionalIndexOf(pos, min, cellSize)));\r\n}\r\n\r\nvec3 positionOf(ivec3 idx, vec3 min, float cellSize) {\r\n    return vec3(idx)*cellSize + min;\r\n}\r\n\r\nvec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);\r\n    vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);\r\n    vec4 lUl = gridAt(grid, ivec3(l.x, U.y, l.z), count, texLength);\r\n    vec4 lUU = gridAt(grid, ivec3(l.x, U.y, U.z), count, texLength);\r\n    vec4 Ull = gridAt(grid, ivec3(U.x, l.y, l.z), count, texLength);\r\n    vec4 UlU = gridAt(grid, ivec3(U.x, l.y, U.z), count, texLength);\r\n    vec4 UUl = gridAt(grid, ivec3(U.x, U.y, l.z), count, texLength);\r\n    vec4 UUU = gridAt(grid, ivec3(U.x, U.y, U.z), count, texLength);\r\n\r\n    vec4 k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    vec4 k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    vec4 k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    vec4 k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    vec4 j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    vec4 j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nfloat gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 count, int texLength, float cellSize, int c) {\r\n    \r\n    vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;\r\n    fIdx = clamp(fIdx, vec3(0,0,0), fIdx);\r\n    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));\r\n    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));\r\n\r\n    float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);\r\n    float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);\r\n    float lUl = gridComponentAt(grid, ivec3(l.x, U.y, l.z), count, texLength, c);\r\n    float lUU = gridComponentAt(grid, ivec3(l.x, U.y, U.z), count, texLength, c);\r\n    float Ull = gridComponentAt(grid, ivec3(U.x, l.y, l.z), count, texLength, c);\r\n    float UlU = gridComponentAt(grid, ivec3(U.x, l.y, U.z), count, texLength, c);\r\n    float UUl = gridComponentAt(grid, ivec3(U.x, U.y, l.z), count, texLength, c);\r\n    float UUU = gridComponentAt(grid, ivec3(U.x, U.y, U.z), count, texLength, c);\r\n\r\n    float k1 = l.z == U.z ? lll : (U.z - fIdx.z) * lll + (fIdx.z - l.z) * llU;\r\n    float k2 = l.z == U.z ? lUl : (U.z - fIdx.z) * lUl + (fIdx.z - l.z) * lUU;\r\n    float k3 = l.z == U.z ? Ull : (U.z - fIdx.z) * Ull + (fIdx.z - l.z) * UlU;\r\n    float k4 = l.z == U.z ? UUl : (U.z - fIdx.z) * UUl + (fIdx.z - l.z) * UUU;\r\n\r\n    float j1 = l.y == U.y ? k1 : (U.y - fIdx.y) * k1 + (fIdx.y - l.y) * k2;\r\n    float j2 = l.y == U.y ? k3 : (U.y - fIdx.y) * k3 + (fIdx.y - l.y) * k4;\r\n\r\n    return l.x == U.x ? j1 : (U.x - fIdx.x) * j1 + (fIdx.x - l.x) * j2;\r\n}\r\n\r\nvoid main() {\r\n    int pIdx = int(v_id) * 2;\r\n    int vIdx = int(v_id) * 2 + 1;\r\n\r\n    int pV = pIdx / u_particleTexLength;\r\n    int pU = pIdx - pV * u_particleTexLength;\r\n\r\n    int vV = vIdx / u_particleTexLength;\r\n    int vU = vIdx - vV * u_particleTexLength;\r\n\r\n    vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);\r\n    vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);\r\n\r\n    vec3 pos = texture2D(u_particles, pUV).rgb;\r\n    vec3 vel = texture2D(u_particles, vUV).rgb;\r\n\r\n    if (u_copy) {\r\n        val = vel;\r\n        gl_Position = vec4(vUV * 2.0 - 1.0, -1.0, 1.0);\r\n    } else {\r\n        val = clamp(pos + vel * u_t, u_min, u_max);\r\n        gl_Position = vec4(pUV * 2.0 - 1.0, -1.0, 1.0);\r\n    }\r\n    \r\n    gl_PointSize = 1.0;\r\n}"
+
+/***/ },
+/* 60 */
+/***/ function(module, exports) {
+
+	module.exports = "\r\nprecision highp float;\r\n\r\nvarying vec3 val;\r\n\r\nvoid main() {\r\n    gl_FragColor = vec4(val, 1.0);\r\n}"
+
+/***/ },
+/* 61 */
+/***/ function(module, exports, __webpack_require__) {
+
+	module.exports = __webpack_require__(62)
+	module.exports.color = __webpack_require__(63)
+
+/***/ },
+/* 62 */
 /***/ function(module, exports) {
 
 	/**
@@ -55696,7 +57059,7 @@
 	dat.utils.common);
 
 /***/ },
-/* 49 */
+/* 63 */
 /***/ function(module, exports) {
 
 	/**
@@ -56454,391 +57817,6 @@
 	})(),
 	dat.color.toString,
 	dat.utils.common);
-
-/***/ },
-/* 50 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-	
-	Object.defineProperty(exports, "__esModule", {
-	    value: true
-	});
-	
-	exports.default = function (gl) {
-	    var _require = __webpack_require__(23)(gl),
-	        getShader = _require.getShader,
-	        addShaders = _require.addShaders;
-	
-	    var quad_vbo = function () {
-	        var buffer = gl.createBuffer();
-	        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-	        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0]), gl.STATIC_DRAW);
-	        return buffer;
-	    }();
-	
-	    var multiply = function () {
-	        var prog = gl.createProgram();
-	
-	        var vs = getShader(__webpack_require__(51), gl.VERTEX_SHADER);
-	        var fs = getShader(__webpack_require__(52), gl.FRAGMENT_SHADER);
-	        addShaders(prog, [vs, fs]);
-	
-	        var u_A = gl.getUniformLocation(prog, "u_A");
-	        var u_B = gl.getUniformLocation(prog, "u_B");
-	        var u_Asize = gl.getUniformLocation(prog, "u_Asize");
-	        var u_Bsize = gl.getUniformLocation(prog, "u_Bsize");
-	        var u_Csize = gl.getUniformLocation(prog, "u_Csize");
-	        var u_Atsize = gl.getUniformLocation(prog, "u_Atsize");
-	        var u_Btsize = gl.getUniformLocation(prog, "u_Btsize");
-	        var u_Ctsize = gl.getUniformLocation(prog, "u_Ctsize");
-	
-	        return function (A, B, C) {
-	            gl.useProgram(prog);
-	
-	            gl.activeTexture(gl.TEXTURE0);
-	            gl.bindTexture(gl.TEXTURE_2D, A.tex);
-	            gl.uniform1i(u_A, 0);
-	
-	            gl.activeTexture(gl.TEXTURE1);
-	            gl.bindTexture(gl.TEXTURE_2D, B.tex);
-	            gl.uniform1i(u_B, 1);
-	
-	            gl.uniform2iv(u_Asize, A.size);
-	            gl.uniform2iv(u_Bsize, B.size);
-	            gl.uniform2iv(u_Csize, C.size);
-	            gl.uniform2iv(u_Atsize, A.textureSize);
-	            gl.uniform2iv(u_Btsize, B.textureSize);
-	            gl.uniform2iv(u_Ctsize, C.textureSize);
-	
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, C.fbo);
-	            var buffer = gl.createBuffer();
-	            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-	            var nMults = A.size[1] * C.size[0] * C.size[1];
-	            gl.bufferData(gl.ARRAY_BUFFER, nMults, gl.STATIC_DRAW);
-	            gl.drawArrays(gl.POINTS, 0, nMults);
-	
-	            gl.bindBuffer(gl.ARRAY_BUFFER, null);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	        };
-	    }();
-	
-	    var incompleteCholesky = function () {
-	        var prog = gl.createProgram();
-	
-	        var vs = getShader(__webpack_require__(53), gl.VERTEX_SHADER);
-	        var fs = getShader(__webpack_require__(54), gl.FRAGMENT_SHADER);
-	        addShaders(prog, [vs, fs]);
-	
-	        var v_pos = gl.getAttribLocation(prog, "v_pos");
-	
-	        var u_A = gl.getUniformLocation(prog, "u_A");
-	        var u_K = gl.getUniformLocation(prog, "u_K");
-	        var u_size = gl.getUniformLocation(prog, "u_size");
-	        var u_tsize = gl.getUniformLocation(prog, "u_tsize");
-	
-	        var u_iter = gl.getUniformLocation(prog, "u_iter");
-	        var u_step = gl.getUniformLocation(prog, "u_step");
-	
-	        function swap(data, m1, m2) {
-	            var temp = data[m1];
-	            data[m1] = data[m2];
-	            data[m2] = temp;
-	        }
-	
-	        return function (data) {
-	
-	            gl.useProgram(prog);
-	
-	            gl.activeTexture(gl.TEXTURE0);
-	            gl.bindTexture(gl.TEXTURE_2D, data.A.tex);
-	            gl.uniform1i(u_A, 0);
-	            gl.uniform2i(u_size, data.A.size[0], data.A.size[1]);
-	            gl.uniform2i(u_tsize, data.A.textureSize[0], data.A.textureSize[1]);
-	
-	            gl.uniform1i(u_K, 1);
-	
-	            gl.viewport(0, 0, data.A.textureSize[0], data.A.textureSize[1]);
-	
-	            gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo);
-	            gl.enableVertexAttribArray(v_pos);
-	            gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0);
-	
-	            gl.activeTexture(gl.TEXTURE1);
-	
-	            // COPY K = A
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, data.K2.fbo);
-	            gl.bindTexture(gl.TEXTURE_2D, data.K1.tex);
-	            gl.uniform1i(u_step, 0);
-	            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	            swap(data, 'K1', 'K2');
-	
-	            for (var i = 0; i < data.A.size[0]; ++i) {
-	
-	                gl.uniform1i(u_iter, i);
-	
-	                // DIAGONAL ENTRIES = sqrt(self)
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, data.K2.fbo);
-	                gl.bindTexture(gl.TEXTURE_2D, data.K1.tex);
-	                gl.uniform1i(u_step, 1);
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	                swap(data, 'K1', 'K2');
-	
-	                // BELOW CURRENT DIAG ENTRY = self / diag
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, data.K2.fbo);
-	                gl.bindTexture(gl.TEXTURE_2D, data.K1.tex);
-	                gl.uniform1i(u_step, 2);
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	                swap(data, 'K1', 'K2');
-	
-	                // MODIFY VALUES BELOW AND TO THE RIGHT OF diag
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, data.K2.fbo);
-	                gl.bindTexture(gl.TEXTURE_2D, data.K1.tex);
-	                gl.uniform1i(u_step, 3);
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	                swap(data, 'K1', 'K2');
-	            }
-	
-	            // CLEAR UPPER TRIANGLE
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, data.K2.fbo);
-	            gl.bindTexture(gl.TEXTURE_2D, data.K1.tex);
-	            gl.uniform1i(u_step, 4);
-	            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	            swap(data, 'K1', 'K2');
-	
-	            // COMPUTE INVERSE
-	
-	            gl.bindTexture(gl.TEXTURE_2D, data.K1.tex);
-	
-	            // initialize inv to I - N
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, data.Kinv.fbo);
-	            gl.uniform1i(u_step, 5);
-	            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	
-	            // create N = A / D - I
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, data.N1.fbo);
-	            gl.uniform1i(u_step, 6);
-	            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	
-	            gl.activeTexture(gl.TEXTURE0);
-	            for (var i = 2; i < data.A.size[0]; ++i) {
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, data.N2.fbo);
-	                gl.bindTexture(gl.TEXTURE_2D, data.N1.tex);
-	
-	                gl.uniform1i(u_step, 7);
-	                gl.uniform1i(u_iter, i);
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	                swap(data, 'N1', 'N2');
-	
-	                // add to the running inverse of (I + N)
-	                gl.enable(gl.BLEND);
-	                gl.blendFunc(gl.ONE, gl.ONE);
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, data.Kinv.fbo);
-	                gl.bindTexture(gl.TEXTURE_2D, data.N1.tex);
-	                gl.uniform1i(u_step, 8);
-	                gl.uniform1i(u_iter, i % 2);
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	                gl.disable(gl.BLEND);
-	            }
-	
-	            // scale everything by Dinv
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, data.K2.fbo);
-	            gl.activeTexture(gl.TEXTURE0);
-	            gl.bindTexture(gl.TEXTURE_2D, data.Kinv.tex);
-	            gl.activeTexture(gl.TEXTURE1);
-	            gl.bindTexture(gl.TEXTURE_2D, data.K1.tex);
-	            gl.uniform1i(u_step, 9);
-	            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	            swap(data, 'K1', 'K2');
-	
-	            // COMPUTE M-1
-	            gl.enable(gl.BLEND);
-	            gl.blendFunc(gl.ONE, gl.ONE);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, data.Minv.fbo);
-	            gl.bindTexture(gl.TEXTURE_2D, data.K1.tex);
-	            gl.uniform1i(u_step, 10);
-	            for (var i = 0; i < data.A.size[0]; ++i) {
-	                gl.uniform1i(u_iter, i);
-	                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-	            }
-	            gl.disable(gl.BLEND);
-	
-	            gl.disableVertexAttribArray(v_pos);
-	            gl.bindBuffer(gl.ARRAY_BUFFER, null);
-	        };
-	    }();
-	
-	    function _solve(data) {
-	        gl.disable(gl.DEPTH_TEST);
-	        gl.disable(gl.BLEND);
-	        incompleteCholesky(data);
-	
-	        return data;
-	    }
-	
-	    function setup(size) {
-	        console.log('Creating problem of size ' + size);
-	        var squareMatSize = Math.pow(2, Math.ceil(Math.log2(Math.ceil(Math.sqrt(size * size)))));
-	        var columnSize = Math.pow(2, Math.ceil(Math.log2(Math.ceil(Math.sqrt(size)))));
-	        var A = {
-	            tex: gl.createTexture(),
-	            fbo: gl.createFramebuffer(),
-	            textureSize: [squareMatSize, squareMatSize],
-	            size: [size, size]
-	        };
-	        var b = {
-	            tex: gl.createTexture(),
-	            fbo: gl.createFramebuffer(),
-	            textureSize: [columnSize, columnSize],
-	            size: [size, 1]
-	        };
-	
-	        var x = {
-	            tex: gl.createTexture(),
-	            fbo: gl.createFramebuffer(),
-	            textureSize: [columnSize, columnSize],
-	            size: [size, 1]
-	        };
-	
-	        var K1 = {
-	            tex: gl.createTexture(),
-	            fbo: gl.createFramebuffer(),
-	            textureSize: [squareMatSize, squareMatSize],
-	            size: [size, size]
-	        };
-	
-	        var K2 = {
-	            tex: gl.createTexture(),
-	            fbo: gl.createFramebuffer(),
-	            textureSize: [squareMatSize, squareMatSize],
-	            size: [size, size]
-	        };
-	
-	        var Kinv = {
-	            tex: gl.createTexture(),
-	            fbo: gl.createFramebuffer(),
-	            textureSize: [squareMatSize, squareMatSize],
-	            size: [size, size]
-	        };
-	
-	        var N1 = {
-	            tex: gl.createTexture(),
-	            fbo: gl.createFramebuffer(),
-	            textureSize: [squareMatSize, squareMatSize],
-	            size: [size, size]
-	        };
-	
-	        var N2 = {
-	            tex: gl.createTexture(),
-	            fbo: gl.createFramebuffer(),
-	            textureSize: [squareMatSize, squareMatSize],
-	            size: [size, size]
-	        };
-	
-	        var Minv = {
-	            tex: gl.createTexture(),
-	            fbo: gl.createFramebuffer(),
-	            textureSize: [squareMatSize, squareMatSize],
-	            size: [size, size]
-	        };
-	
-	        var _arr = [A, b, x, K1, K2, Kinv, N1, N2, Minv];
-	        for (var _i = 0; _i < _arr.length; _i++) {
-	            var mat = _arr[_i];
-	            gl.bindTexture(gl.TEXTURE_2D, mat.tex);
-	            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, mat.textureSize[0], mat.textureSize[1], 0, gl.RGBA, gl.FLOAT, null);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	            gl.bindTexture(gl.TEXTURE_2D, null);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, mat.fbo);
-	            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, mat.tex, 0);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	        }
-	
-	        var data = {
-	            A: A,
-	            b: b,
-	            x: x,
-	            K1: K1, K2: K2, // incomplete cholesky ping-pong
-	            Kinv: Kinv,
-	            N1: N1, N2: N2,
-	            Minv: Minv, // precondition matrix
-	            solve: function solve() {
-	                return _solve(data);
-	            },
-	            setA: function setA(arr) {
-	                var buf = new Float32Array(4 * A.textureSize[0] * A.textureSize[1]);
-	                for (var i = 0; i < arr.length; ++i) {
-	                    buf[4 * i] = arr[i];
-	                }
-	                gl.bindTexture(gl.TEXTURE_2D, A.tex);
-	                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, A.textureSize[0], A.textureSize[1], gl.RGBA, gl.FLOAT, buf);
-	                gl.bindTexture(gl.TEXTURE_2D, null);
-	                return data;
-	            },
-	            setb: function setb(arr) {
-	                var buf = new Float32Array(4 * b.textureSize[0] * b.textureSize[1]);
-	                for (var i = 0; i < arr.length; ++i) {
-	                    buf[4 * i] = arr[i];
-	                }
-	                gl.bindTexture(gl.TEXTURE_2D, b.tex);
-	                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, b.textureSize[0], b.textureSize[1], gl.RGBA, gl.FLOAT, buf);
-	                gl.bindTexture(gl.TEXTURE_2D, null);
-	                return data;
-	            },
-	            print: function print(mat) {
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, mat.fbo);
-	                var out = new Float32Array(4 * mat.textureSize[0] * mat.textureSize[1]);
-	                gl.readPixels(0, 0, mat.textureSize[0], mat.textureSize[1], gl.RGBA, gl.FLOAT, out);
-	
-	                for (var j = 0; j < mat.size[1]; ++j) {
-	                    var out2 = new Float32Array(mat.size[0]);
-	                    for (var i = 0; i < mat.size[0]; ++i) {
-	                        out2[i] = out[4 * (j * mat.size[0] + i)];
-	                    }
-	                    console.log(out2);
-	                }
-	                console.log("-------------------");
-	                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	                return data;
-	            }
-	        };
-	
-	        return data;
-	    }
-	
-	    return function () {
-	        return {
-	            setup: setup
-	        };
-	    };
-	};
-
-/***/ },
-/* 51 */
-/***/ function(module, exports) {
-
-	module.exports = "\nuniform sampler2D u_A;\nuniform sampler2D u_B;\n\nuniform ivec2 u_Asize;\nuniform ivec2 u_Bsize;\nuniform ivec2 u_Csize;\nuniform int u_Atsize;\nuniform int u_Btsize;\nuniform int u_Ctsize;\n\nattribute float idx;\n\nvarying vec4 result;\n\nivec2 UVtoRC(vec2 uv, ivec2 size, int tsize) {\n    ivec2 iuv = ivec2(uv * float(tsize));\n    int idx = iuv.x + iuv.y * tsize;\n    int c = idx / size.x;\n    int r = idx - c * size.x;\n    return ivec2(r, c);\n}\n\nvec2 RCtoUV(ivec2 rc, ivec2 size, int tsize) {\n    int idx = rc.x + rc.y * size.x;\n    int y = idx / tsize;\n    int x = idx - y * tsize;\n    return vec2(x, y) / float(tsize);\n}\n\n// compute A * B\nvoid main() {\n\n    int midx = int(idx);                // overall multiplication index\n    int ridx = midx / u_Asize.y;        // result index\n    int didx = midx - ridx * u_Asize.y; // dot product index\n\n    int rc = ridx / u_Csize.x;\n    int rr = ridx - rc * u_Csize.x;\n\n    vec4 result = texture2D(u_A, RCtoUV(ivec2(rr, didx), u_Asize, u_Atsize)) * texture2D(u_B, RCtoUV(ivec2(didx, rc), u_Bsize, u_Btsize));\n\n    gl_Position = vec4(vec2(\n        ridx / u_Ctsize,\n        ridx - (ridx / u_Ctsize) * u_Ctsize\n    ) / float(u_Ctsize) * 2.0 - 1.0, -1.0, 1.0);\n    gl_PointSize = 1.0;\n}"
-
-/***/ },
-/* 52 */
-/***/ function(module, exports) {
-
-	module.exports = "\nprecision highp float;\n\nvarying vec4 result;\n\nvoid main() {\n    gl_FragColor = result;\n}"
-
-/***/ },
-/* 53 */
-/***/ function(module, exports) {
-
-	module.exports = "\nattribute vec2 v_pos;\n\nvarying vec2 uv;\n\n void main() {\n     uv = v_pos * 0.5 + 0.5;\n     gl_Position = vec4(v_pos, 0.0, 1.0);\n }"
-
-/***/ },
-/* 54 */
-/***/ function(module, exports) {
-
-	module.exports = "\nprecision highp float;\n\nuniform sampler2D u_A;\nuniform sampler2D u_K;\nuniform ivec2 u_size;\nuniform ivec2 u_tsize;\nuniform int u_iter;\nuniform int u_step;\nvarying vec2 uv;\n\nivec2 UVtoRC(vec2 uv) {\n    ivec2 iuv = ivec2(uv * float(u_tsize.x));\n    int idx = iuv.x + iuv.y * u_tsize.x;\n    int c = idx / u_size.x;\n    int r = idx - c * u_size.x;\n    return ivec2(r, c);\n}\n\nvec2 RCtoUV(ivec2 rc) {\n    int idx = rc.x + rc.y * u_size.x;\n    int y = idx / u_tsize.x;\n    int x = idx - y * u_tsize.x;\n    return vec2(x, y) / float(u_tsize.x);\n}\n\nvoid main() {\n    ivec2 rc = UVtoRC(uv);\n\n    int r = rc.x;\n    int c = rc.y;\n\n    if (u_step == 0) {\n        gl_FragColor = texture2D(u_A, uv);\n        return;\n    } else if (u_step == 1) {\n        if (r == c && c == u_iter) {\n            gl_FragColor = vec4(sqrt(texture2D(u_K, uv)[0]));\n            return;\n        }\n    } else if (u_step == 2) {\n        if (c == u_iter && r > c) {\n            if (texture2D(u_A, uv)[0] != 0.0) {\n                gl_FragColor = vec4(texture2D(u_K, uv)[0] / texture2D(u_K, RCtoUV(ivec2(c,c)))[0]);\n                return;\n            }\n        }\n    } else if (u_step == 3) {\n        if (c > u_iter && r >= c) {\n            if (texture2D(u_A, uv)[0] != 0.0) {\n                gl_FragColor = vec4(\n                    texture2D(u_K, uv)[0] - texture2D(u_K, RCtoUV(ivec2(r,u_iter)))[0] * texture2D(u_K, RCtoUV(ivec2(c,u_iter)))[0]\n                );\n                return;\n            }\n        }\n    } else if (u_step == 4) {\n        if (c > r) {\n            gl_FragColor = vec4(0);\n            return;\n        }\n    } else if (u_step == 5) {\n        if (r == c) {\n            gl_FragColor = vec4(1);\n        } else if (r > c) {\n            gl_FragColor = -texture2D(u_K, uv) / texture2D(u_K, RCtoUV(ivec2(r,r)))[0];\n        } else {\n            gl_FragColor = vec4(0);\n        }\n        return;\n    } else if (u_step == 6) {\n        if (r > c) {\n            gl_FragColor = texture2D(u_K, uv) / texture2D(u_K, RCtoUV(ivec2(r,r)))[0];\n        } else {\n            gl_FragColor = vec4(0);\n        }\n        return;\n    } else if (u_step == 7) {\n        float val = u_iter > c ? texture2D(u_K, RCtoUV(ivec2(u_iter,c)))[0] : 0.0;\n        gl_FragColor = vec4(texture2D(u_A, RCtoUV(ivec2(r,u_iter)))[0] * val);\n        return;\n    } else if (u_step == 8) {\n        gl_FragColor = (u_iter == 0 ? 1.0 : -1.0) * texture2D(u_A, uv);\n        return;\n    } else if (u_step == 9) {\n        gl_FragColor = texture2D(u_A, uv) / texture2D(u_K, RCtoUV(ivec2(c,c)))[0];\n        return;\n    } else if (u_step == 10) {\n        gl_FragColor = vec4(texture2D(u_K, RCtoUV(ivec2(u_iter,c)))[0] * texture2D(u_K, RCtoUV(ivec2(u_iter,r)))[0]);\n        return;\n    }\n    gl_FragColor = texture2D(u_K, uv);\n}"
 
 /***/ }
 /******/ ]);
