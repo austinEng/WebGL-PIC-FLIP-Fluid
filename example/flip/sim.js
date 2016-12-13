@@ -711,7 +711,7 @@ export default function (gl) {
 
                 var v_id = gl.getAttribLocation(prog, "v_id")
 
-                var pointCount = 4*grid.count[0]*grid.count[1]*grid.count[2]
+                var pointCount = 7*grid.count[0]*grid.count[1]*grid.count[2]
                 var pointBuffer = gl.createBuffer()
                 gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer)
                 var data = new Float32Array(pointCount)
