@@ -113,7 +113,7 @@ var drawloop = Loop(
   },
   (t) => {
     if (sim.shouldUpdate) {
-      sim.step(STEP_SIZE)
+      sim.step(STEP_SIZE, simulationControls.precondition)
     }
 
     gl.enable(gl.DEPTH_TEST)
@@ -163,9 +163,10 @@ var simulationControls = {
     drawloop.start()
   },
   step: function() {
-    sim.step(STEP_SIZE)
+    sim.step(STEP_SIZE, simulationControls.precondition)
     drawloop.start()
   },
+  precondition: false,
   density: 100000,  // particles per cubic meter
   solverSteps: 10
 }
@@ -176,6 +177,7 @@ var gui = new DAT.GUI();
 var fluidSettings = gui.addFolder('Fluid')
 fluidSettings.add(simulationControls, 'density')
 fluidSettings.add(simulationControls, 'solverSteps', 1, 100)
+fluidSettings.add(simulationControls, 'precondition')
 fluidSettings.open()
 var controls = gui.addFolder('Controls')
 controls.add(simulationControls, 'start')

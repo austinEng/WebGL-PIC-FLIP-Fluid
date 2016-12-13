@@ -42,6 +42,10 @@ bool checkIdx(ivec3 idx, ivec3 count) {
     return all(greaterThanEqual(idx, ivec3(0,0,0))) && all(lessThan(idx, count));
 }
 
+ivec3 clampIdx(ivec3 idx, ivec3 low, ivec3 high) {
+    return ivec3(clamp(vec3(idx), vec3(low), vec3(high)));
+}
+
 vec3 fractionalIndexOf(vec3 pos, vec3 min, float cellSize) {
     return (pos - min) / cellSize;
 }

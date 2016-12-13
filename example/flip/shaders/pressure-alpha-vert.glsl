@@ -3,7 +3,6 @@ attribute float v_id;
 uniform ivec3 u_count;
 uniform int u_texLength;
 uniform sampler2D u_pcg;
-uniform float u_scale;
 varying vec4 val;
 varying float keep;
 

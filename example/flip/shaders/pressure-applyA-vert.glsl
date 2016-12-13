@@ -2,6 +2,7 @@
 attribute float v_id;
 uniform ivec3 u_count;
 uniform int u_texLength;
+uniform float u_scale;
 uniform sampler2D u_A;
 uniform sampler2D u_pcg;
 varying vec4 val;
@@ -61,26 +62,26 @@ void main() {
 
   float v;
   if (t == 0) {
-    v = Aplusi(tgt) * s;
+    v = Aplusi(uv) * s;
     // if (!checkIdx(tgtIdx, u_count - 1)) keep = 0.0;
   } else if (t == 1) {
-    v = Aplusj(tgt) * s;
+    v = Aplusj(uv) * s;
     // if (!checkIdx(tgtIdx, u_count - 1)) keep = 0.0;
   } else if (t == 2) {
-    v = Aplusk(tgt) * s;
+    v = Aplusk(uv) * s;
     // if (!checkIdx(tgtIdx, u_count - 1)) keep = 0.0;
   } else if (t == 3) {
-    v = Adiag(tgt) * s;
+    v = Adiag(uv) * s;
     // if (!checkIdx(tgtIdx, u_count - 1)) keep = 0.0;
   } else if (t == 4) {
-    v = Aplusi(mI) * s;
-    if (!checkIdx(tgtIdx - ivec3(1,0,0), u_count - 1)) v = 0.0;
+    v = Aplusi(tgt) * s;
+    // if (!checkIdx(tgtIdx - ivec3(1,0,0), u_count - 1)) v = 0.0;
   } else if (t == 5) {
-    v = Aplusj(mJ) * s;
-    if (!checkIdx(tgtIdx - ivec3(0,1,0), u_count - 1)) v = 0.0;
+    v = Aplusj(tgt) * s;
+    // if (!checkIdx(tgtIdx - ivec3(0,1,0), u_count - 1)) v = 0.0;
   } else if (t == 6) {
-    v = Aplusk(mK) * s;
-    if (!checkIdx(tgtIdx - ivec3(0,0,1), u_count - 1)) v = 0.0;
+    v = Aplusk(tgt) * s;
+    // if (!checkIdx(tgtIdx - ivec3(0,0,1), u_count - 1)) v = 0.0;
   }
 
   //val = texture2D(u_pcg, tgt) / 7.0;
@@ -91,7 +92,7 @@ void main() {
     val = vec4(0,0,0,0);
   } else {
     // val[2] = v;
-    val = vec4(0, 0, v, 0);
+    val = vec4(0, 0, u_scale * v, 0);
   }
 
   gl_Position = vec4(tgt * 2.0 - 1.0, 0.0, 1.0);

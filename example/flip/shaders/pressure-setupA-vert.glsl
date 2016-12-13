@@ -83,6 +83,7 @@ void main() {
     if (isPlusGrid) {
       keep = 0.0;
       return;
+      val = vec4(0,0,0,u_scale);
     } else {
       val = vec4(0,0,0,u_scale);
     }

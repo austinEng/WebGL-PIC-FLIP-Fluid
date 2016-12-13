@@ -62,7 +62,7 @@ void main() {
   }
 
                   //  p   r   z  s
-  gl_FragColor = vec4(0, div, 0, 0);
+  gl_FragColor = vec4(0, div, 0, div);
   
   // if (idx.x >= u_count.x - 1 || 
   //     idx.y >= u_count.y - 1 || 
