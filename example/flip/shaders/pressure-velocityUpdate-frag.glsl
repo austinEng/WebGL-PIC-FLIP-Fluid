@@ -13,7 +13,7 @@ varying vec2 f_uv;
 
 @import ./include/grid;
 
-#define CHECK_FLUID(offset) (checkIdx(idx + offset, u_count - 1) && texture2D(u_types, XYZtoUV(idx + offset, u_texLength, u_count))[0] == 1.0)
+#define CHECK_FLUID(offset) (checkIdx(idx + offset, u_count - 1) && (texture2D(u_types, XYZtoUV(idx + offset, u_texLength, u_count))[0] == 1.0 || texture2D(u_types, XYZtoUV(idx + offset, u_texLength, u_count))[0] == 3.0))
 
 void main() {
   ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);

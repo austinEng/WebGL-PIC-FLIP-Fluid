@@ -32,11 +32,11 @@ void main() {
     max(float(val.r >= 4.0), 0.1),
     0.2);
   } else if (u_mode == 1) {
-    f_col = 10.0*vec4(vec3(abs(val)), 0.2);
+    f_col = vec4(10.0*vec3(abs(val)), 0.2);
   } else if (u_mode == 2) {
     for (int i = 0; i < 3; ++i) {
       if (i == u_c) {
-        f_col = vec4(vec3(abs(val[i])), 0.2);   
+        f_col = vec4(10.0*vec3(abs(val[i])), 0.2);   
         break;
       }
     }

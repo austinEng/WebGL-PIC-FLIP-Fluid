@@ -39,19 +39,19 @@ void main() {
                   - pow(Aplusj(mJ) * precon(mJ), 2.0)
                   - pow(Aplusk(mK) * precon(mK), 2.0)
 
-                  - 0.97 * (
-                    Aplusi(mI) * (
-                      Aplusj(mI) + Aplusk(mI)
-                    ) * pow(precon(mI), 2.0) +
+                  // - 0.97 * (
+                  //   Aplusi(mI) * (
+                  //     Aplusj(mI) + Aplusk(mI)
+                  //   ) * pow(precon(mI), 2.0) +
 
-                    Aplusj(mJ) * (
-                      Aplusi(mJ) + Aplusk(mJ)
-                    ) * pow(precon(mJ), 2.0) +
+                  //   Aplusj(mJ) * (
+                  //     Aplusi(mJ) + Aplusk(mJ)
+                  //   ) * pow(precon(mJ), 2.0) +
 
-                    Aplusk(mK) * (
-                      Aplusi(mK) + Aplusj(mK)
-                    ) * pow(precon(mK), 2.0)
-                  )
+                  //   Aplusk(mK) * (
+                  //     Aplusi(mK) + Aplusj(mK)
+                  //   ) * pow(precon(mK), 2.0)
+                  // )
                   ;
   if (e < 0.25 * diag) {
     e = diag;

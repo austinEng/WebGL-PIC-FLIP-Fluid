@@ -28,8 +28,16 @@ varying vec4 val;
 
 void main() {
   ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
-  if (!checkIdx(idx, u_count - 1)) discard;
-  if (texture2D(u_types, f_uv)[0] != 1.0) discard;
+  vec4 curr;
+  if (u_step == 0) {
+    curr = texture2D(u_q, f_uv);
+  } else if (u_step == 1) {
+    curr = texture2D(u_pcg, f_uv);
+  }
+  if (!checkIdx(idx, u_count - 1) || !(texture2D(u_types, f_uv)[0] == 1.0 || texture2D(u_types, f_uv)[0] == 3.0)) {
+    gl_FragColor = curr;
+    return;
+  }
 
   vec2 mI = XYZtoUV(idx - ivec3(1,0,0), u_texLength, u_count);
   vec2 mJ = XYZtoUV(idx - ivec3(0,1,0), u_texLength, u_count);
@@ -48,9 +56,9 @@ void main() {
   // int greatestIdx = int(max(max(float(idx.x), float(idx.y)), float(idx.z)));
   // int smallestIdx = int(min(min(float(idx.x), float(idx.y)), float(idx.z)));
 
-  vec4 curr;
+  // vec4 curr;
   if (u_step == 0) {
-    curr = texture2D(u_q, f_uv);
+    // curr = texture2D(u_q, f_uv);
     // if (u_iter == greatestIdx) {
     if (idx.x <= u_iter && idx.y <= u_iter && idx.z <= u_iter) {
       float t = texture2D(u_pcg, f_uv)[1]
@@ -61,7 +69,7 @@ void main() {
     }
 
   } else if (u_step == 1) {
-    curr = texture2D(u_pcg, f_uv);
+    // curr = texture2D(u_pcg, f_uv);
     // if (u_iter == smallestIdx) {
     if (idx.x >= u_iter && idx.y >= u_iter && idx.z >= u_iter) {
       float t = texture2D(u_q, f_uv)[0]
@@ -70,6 +78,7 @@ void main() {
         - Aplusk(f_uv) * precon(f_uv) * GET(u_pcg, pK, 2);
       curr[2] = t * precon(f_uv);
       if (u_setS) curr[3] = curr[2];
+      // curr = vec4(float(idx.x), float(idx.y), float(idx.z), curr[2]);
     }
   }
 

@@ -166,7 +166,7 @@ var simulationControls = {
     sim.step(STEP_SIZE, simulationControls.precondition)
     drawloop.start()
   },
-  precondition: false,
+  precondition: true,
   density: 100000,  // particles per cubic meter
   solverSteps: 10
 }
@@ -176,7 +176,7 @@ initialize(simulationControls)
 var gui = new DAT.GUI();
 var fluidSettings = gui.addFolder('Fluid')
 fluidSettings.add(simulationControls, 'density')
-fluidSettings.add(simulationControls, 'solverSteps', 1, 100)
+fluidSettings.add(simulationControls, 'solverSteps', 1, 1000)
 fluidSettings.add(simulationControls, 'precondition')
 fluidSettings.open()
 var controls = gui.addFolder('Controls')
