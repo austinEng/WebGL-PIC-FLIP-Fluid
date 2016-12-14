@@ -21,22 +21,20 @@ void main() {
   vec3 pos;
 
   float scale = 0.2;
+  ivec3 xyz = toXYZ(idx, u_count);
   if (u_g == 0) {
-    ivec3 xyz = toXYZ(idx, u_count);
     pos = positionOf(xyz, u_min, u_cellSize) + vec3(0,0.5,0.5) * u_cellSize;
 
     if (v_id / 2.0 > floor(v_id / 2.0)) {
       pos += scale * vec3(1,0,0) * gridComponentAt(u_grid, xyz, u_count, u_texLength, 0);
     }
   } else if (u_g == 1) {
-    ivec3 xyz = toXYZ(idx, u_count);
     pos = positionOf(xyz, u_min, u_cellSize) + vec3(0.5,0,0.5) * u_cellSize;
 
     if (v_id / 2.0 > floor(v_id / 2.0)) {
       pos += scale * vec3(0,1,0) * gridComponentAt(u_grid, xyz, u_count, u_texLength, 1);
     }
   } else if (u_g == 2) {
-    ivec3 xyz = toXYZ(idx, u_count);
     pos = positionOf(xyz, u_min, u_cellSize) + vec3(0.5,0.5,0) * u_cellSize;
 
     if (v_id / 2.0 > floor(v_id / 2.0)) {
