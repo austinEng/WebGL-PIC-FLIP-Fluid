@@ -23,7 +23,7 @@ void main() {
     vec3 v_pos = texture2D(u_particles, pUV).rgb;
     vec3 v_vel = texture2D(u_particles, vUV).rgb;
 
-    f_col = clamp(vec3(0,0,1) + vec3(length(v_vel) / 2.0), vec3(0,0,0), vec3(1,1,1));
+    f_col = clamp(mix(vec3(0,0,1), vec3(0,0.5,1), texture2D(u_particles, pUV).a) + vec3(length(v_vel) / 4.0), vec3(0,0,0), vec3(1,1,1));
     gl_Position = u_viewProj * vec4(v_pos, 1.0);
     gl_PointSize = 3.0;
 }

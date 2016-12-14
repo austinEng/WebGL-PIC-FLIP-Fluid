@@ -19,6 +19,7 @@ void main() {
   float alpha = sigma / zdots;
 
   if (((zdots <= 0.0 || 0.0 <= zdots) ? false : true)) alpha = 0.0;
+  if (zdots == 0.0) alpha = 0.0;
 
   curr[0] += alpha*curr[3];
   curr[1] -= alpha*curr[2];

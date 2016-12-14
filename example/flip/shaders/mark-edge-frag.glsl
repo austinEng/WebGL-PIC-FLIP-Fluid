@@ -15,6 +15,7 @@ void main() {
 
     if (any(equal(idx, ivec3(0,0,0))) || any(equal(idx, u_count - 2))) {
       gl_FragColor = vec4(2.0, 2.0, 2.0, 2.0);
+      // discard;
     } else {
       discard;
     }

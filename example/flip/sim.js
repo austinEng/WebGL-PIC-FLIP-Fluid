@@ -444,34 +444,43 @@ export default function (gl) {
                 }
             })()
 
-            // var buildA = (function() {
-            //     var prog = gl.createProgram()
+            var buildA = (function() {
+                var prog = gl.createProgram()
 
-            //     var vs = getShader(require('./shaders/quad-vert.glsl'), gl.VERTEX_SHADER);
-            //     var fs = getShader(require('./shaders/buildA-frag.glsl'), gl.FRAGMENT_SHADER);
-            //     addShaders(prog, [vs, fs]);
+                var vs = getShader(require('./shaders/quad-vert.glsl'), gl.VERTEX_SHADER);
+                var fs = getShader(require('./shaders/pressure-buildA-frag.glsl'), gl.FRAGMENT_SHADER);
+                addShaders(prog, [vs, fs]);
 
-            //     var u_count = gl.getUniformLocation(prog, "u_count")
-            //     var u_types = gl.getUniformLocation(prog, "u_types")
-            //     var u_texLength = gl.getUniformLocation(prog, "u_texLength")
+                var u_count = gl.getUniformLocation(prog, "u_count")
+                var u_types = gl.getUniformLocation(prog, "u_types")
+                var u_texLength = gl.getUniformLocation(prog, "u_texLength")
 
-            //     var v_pos = gl.getAttribLocation(prog, "v_pos")
+                var v_pos = gl.getAttribLocation(prog, "v_pos")
 
-            //     return function() {
-            //         gl.useProgram(prog)
+                return function() {
+                    gl.useProgram(prog)
 
-            //         gl.activeTexture(gl.TEXTURE0)
-            //         gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
-            //         gl.uniform1i(u_types, 0)
-            //         gl.uniform1i(u_texLength, grid.textureLength)
-            //         gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
+                    gl.activeTexture(gl.TEXTURE0)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
+                    gl.uniform1i(u_types, 0)
+                    gl.uniform1i(u_texLength, grid.textureLength)
+                    gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
 
-            //         gl.bindFramebuffer(gl.FRAMEBUFFER, grid.P.fbo)
-            //         gl.clearColor(0,0,0,0)
-            //         gl.clear(gl.COLOR_BUFFER_BIT)
-            //         gl.viewport(0, 0, grid.textureLength, grid.textureLength)
-            //     }
-            // })()
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, grid.P.fbo)
+                    gl.clearColor(0,0,0,0)
+                    gl.clear(gl.COLOR_BUFFER_BIT)
+                    gl.viewport(0, 0, grid.textureLength, grid.textureLength)
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo)
+                
+                    gl.enableVertexAttribArray(v_pos)
+                    gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0)
+
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+                    gl.disableVertexAttribArray(v_pos)
+                }
+            })()
 
             var setupA = (function() {
                 var prog = gl.createProgram()
@@ -695,6 +704,10 @@ export default function (gl) {
                         gl.uniform1i(u_iter, i)
                         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 
+                        // var buf = new Float32Array(grid.textureLength*grid.textureLength*4)
+                        // gl.readPixels(0,0,grid.textureLength, grid.textureLength, gl.RGBA, gl.FLOAT, buf)
+                        // buf = buf.filter(val => val != 0);
+                        // console.log(i, buf)
                         
                     }
 
@@ -1204,6 +1217,7 @@ export default function (gl) {
             return function(t, shouldPrecondition) {
                 clearMatrices()
                 // setupA(t)
+                buildA()
                 setupb()
 
                 if (shouldPrecondition) {
@@ -1228,6 +1242,7 @@ export default function (gl) {
                     clearZ()
                     computeAs()
                     computeAlpha()
+                    
 
                     // var alphap = 0.0;
                     // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
@@ -1243,6 +1258,7 @@ export default function (gl) {
                     // console.log('alpha:', buf[0] / buf[4], buf[0], buf[4])
 
                     updateGuess()
+                    // break;
                     // recomputeResidual()
 
                     // var max = 0.0;
@@ -1275,14 +1291,14 @@ export default function (gl) {
 
                     updateSearch()
                 }
-                var max = 0.0;
-                gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
-                gl.readPixels(0,0,grid.textureLength,grid.textureLength,gl.RGBA, gl.FLOAT, buf)
-                for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
-                    var val = Math.abs(buf[4*j + 1]);
-                    if (val > max) max = val;
-                }
-                console.log('error:', max)
+                // var max = 0.0;
+                // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
+                // gl.readPixels(0,0,grid.textureLength,grid.textureLength,gl.RGBA, gl.FLOAT, buf)
+                // for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
+                //     var val = Math.abs(buf[4*j + 1]);
+                //     if (val > max) max = val;
+                // }
+                // console.log('error:', max)
 
                 velocityUpdate(t)
             }

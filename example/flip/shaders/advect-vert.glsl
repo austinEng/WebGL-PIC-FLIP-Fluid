@@ -8,7 +8,7 @@ uniform float u_t;
 uniform vec3 u_min;
 uniform vec3 u_max;
 
-varying vec3 val;
+varying vec4 val;
 
 @import ./include/grid;
 
@@ -25,14 +25,14 @@ void main() {
     vec2 pUV = (vec2(pU, pV) + 0.01) / float(u_particleTexLength);
     vec2 vUV = (vec2(vU, vV) + 0.01) / float(u_particleTexLength);
 
-    vec3 pos = texture2D(u_particles, pUV).rgb;
-    vec3 vel = texture2D(u_particles, vUV).rgb;
+    vec4 pos = texture2D(u_particles, pUV);
+    vec4 vel = texture2D(u_particles, vUV);
 
     if (u_copy) {
         val = vel;
         gl_Position = vec4(vUV * 2.0 - 1.0, -1.0, 1.0);
     } else {
-        val = clamp(pos + vel * u_t, u_min, u_max);
+        val = vec4(clamp(pos.rgb + vel.rgb * u_t, u_min, u_max), pos.w);
         gl_Position = vec4(pUV * 2.0 - 1.0, -1.0, 1.0);
     }
     

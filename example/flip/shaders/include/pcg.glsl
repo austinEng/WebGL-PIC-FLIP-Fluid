@@ -22,6 +22,7 @@ float ADIAG(ivec3 idx, ivec3 count, int texLength, sampler2D types) {
 
   if (texture2D(types, uv)[0] != 1.0) {
     return diag;
+    // return 0.0;
   }
 
   if (checkIdx(mIi, count - 1) && texture2D(types, mI)[0] == 2.0) diag--;
