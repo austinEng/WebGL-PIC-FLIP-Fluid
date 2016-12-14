@@ -66,7 +66,7 @@ void main() {
     gl_Position = vec4(XYZtoUV(idx, u_texLength, u_count) * 2.0 - 1.0, 0.0, 1.0);
   }
 
-  if (typeA == 1.0 && typeB == 1.0) {
+  if ((typeA == 1.0 || typeA == 3.0) && (typeB == 1.0 || typeB == 3.0)) {
     if (isPlusGrid) {
       val = vec4(0,0,0,u_scale);
     } else {
@@ -79,13 +79,20 @@ void main() {
         val[2] = -u_scale;
       }
     }
-  } else if (typeA == 1.0 && typeB == 0.0) {
+  } else if ((typeA == 1.0 || typeA == 3.0) && typeB == 0.0) {
     if (isPlusGrid) {
       keep = 0.0;
-      return;
       val = vec4(0,0,0,u_scale);
     } else {
       val = vec4(0,0,0,u_scale);
     }
   }
+  // else if (typeB == 1.0 && typeA == 0.0) {
+  //   if (isPlusGrid) {
+  //     val = vec4(0,0,0,u_scale);
+  //   } else {
+  //     keep = 0.0;
+  //     val = vec4(0,0,0,u_scale);
+  //   }
+  // }
 }

@@ -20,8 +20,11 @@ varying vec2 f_uv;
 
 void main() {
   ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
-  if (!checkIdx(idx, u_count - 1)) discard;
   vec4 curr = texture2D(u_pcg, f_uv);
+  if (!checkIdx(idx, u_count - 1)) {
+    gl_FragColor = curr;
+    return;
+  }
 
   ivec3 mIi = idx - ivec3(1,0,0);
   ivec3 mJi = idx - ivec3(0,1,0);
@@ -47,14 +50,16 @@ void main() {
   if (checkIdx(mKi, u_count - 1)) {
     val += Aplusk(mK) * GET(u_pcg, mK, 3);
   }
+
   val += Adiag(f_uv) * GET(u_pcg, f_uv, 3);
-  if (checkIdx(pIi, u_count - 1)) {
+  
+  if (checkIdx(f_uv, u_count - 1)) {
     val += Aplusi(f_uv) * GET(u_pcg, pI, 3);
   }
-  if (checkIdx(pJi, u_count - 1)) {
+  if (checkIdx(f_uv, u_count - 1)) {
     val += Aplusj(f_uv) * GET(u_pcg, pJ, 3);
   }
-  if (checkIdx(pKi, u_count - 1)) {
+  if (checkIdx(f_uv, u_count - 1)) {
     val += Aplusk(f_uv) * GET(u_pcg, pK, 3);
   }
 

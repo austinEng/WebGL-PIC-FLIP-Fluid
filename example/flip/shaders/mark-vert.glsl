@@ -7,16 +7,27 @@ uniform int u_texLength;
 attribute float v_id;
 uniform sampler2D u_particles;
 uniform int u_particleTexLength;
+uniform bool u_near;
 
 varying float type;
 
 @import ./include/grid;
 
 void main() {
-    int pIdx = (int(v_id) / 7) * 2;
-    int vIdx = (int(v_id) / 7) * 2 + 1;
+    int _type;
+    int pIdx;
+    int vIdx;
 
-    int type = int(v_id) - (int(v_id) / 7) * 7;
+    if (u_near) {
+        pIdx = (int(v_id) / 6) * 2;
+        vIdx = (int(v_id) / 6) * 2 + 1;
+
+        _type = int(v_id) - (int(v_id) / 6) * 6;
+
+    } else {
+        pIdx = int(v_id) * 2;
+        vIdx = int(v_id) * 2 + 1;
+    }
 
     int pV = pIdx / u_particleTexLength;
     int pU = pIdx - pV * u_particleTexLength;
@@ -35,20 +46,39 @@ void main() {
 
     ivec3 oldIdx = idx;
 
-    if (type == 0) {
+    // if (type == 0) {
 
-    } else if (type == 1) {
-        idx += ivec3(1, 0, 0);
-    } else if (type == 2) {
-        idx -= ivec3(1, 0, 0);
-    } else if (type == 3) {
-        idx += ivec3(0, 1, 0);
-    } else if (type == 4) {
-        idx -= ivec3(0, 1, 0);
-    } else if (type == 5) {
-        idx += ivec3(0, 0, 1);
-    } else if (type == 6) {
-        idx -= ivec3(0, 0, 1);
+    // } else if (type == 1) {
+    //     idx += ivec3(1, 0, 0);
+    // } else if (type == 2) {
+    //     idx -= ivec3(1, 0, 0);
+    // } else if (type == 3) {
+    //     idx += ivec3(0, 1, 0);
+    // } else if (type == 4) {
+    //     idx -= ivec3(0, 1, 0);
+    // } else if (type == 5) {
+    //     idx += ivec3(0, 0, 1);
+    // } else if (type == 6) {
+    //     idx -= ivec3(0, 0, 1);
+    // }
+
+    if (u_near) {
+        if (_type == 1) {
+            idx += ivec3(1, 0, 0);
+        } else if (_type == 2) {
+            idx -= ivec3(1, 0, 0);
+        } else if (_type == 3) {
+            idx += ivec3(0, 1, 0);
+        } else if (_type == 4) {
+            idx -= ivec3(0, 1, 0);
+        } else if (_type == 5) {
+            idx += ivec3(0, 0, 1);
+        } else if (_type == 6) {
+            idx -= ivec3(0, 0, 1);
+        }
+        type = 1.0;
+    } else {
+        type = 1.0;
     }
 
     if (!checkIdx(idx, u_count)) {
