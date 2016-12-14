@@ -83,7 +83,7 @@ renderer.add(particlePainter)
 
 function initialize(settings) { 
   var CELL_SIZE = 2 / Math.cbrt(settings.density) // ~8 particles per cell
-  var box = new BoxRegion(settings.density, new Bound({
+  var box = new BoxRegion(4*settings.density, new Bound({
     minX: -0.2, maxX: 0.2,
     minY: -0.3, maxY: 0.3,
     minZ: -0.2, maxZ: 0.2
@@ -167,7 +167,7 @@ var simulationControls = {
     drawloop.start()
   },
   precondition: true,
-  density: 100000,  // particles per cubic meter
+  density: 30000,  // particles per cubic meter
   solverSteps: 10
 }
 

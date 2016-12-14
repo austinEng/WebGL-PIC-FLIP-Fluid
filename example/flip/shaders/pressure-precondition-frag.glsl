@@ -11,6 +11,7 @@ uniform ivec3 u_count;
 varying vec2 f_uv;
 
 @import ./include/grid;
+@import ./include/pcg;
 
 #define GET(grid, uv, c) (uv.x < 0.0 ? 0.0 : texture2D(grid, uv)[c])
 #define Aplusi(uv) GET(u_A, uv, 0)
@@ -32,12 +33,16 @@ void main() {
     if (!checkIdx(idx - ivec3(0,1,0), u_count-1)) mJ[0] = -1.0;
     if (!checkIdx(idx - ivec3(0,0,1), u_count-1)) mK[0] = -1.0; 
 
-    float diag = Adiag(f_uv);
+    // float diag = Adiag(f_uv);
+    float diag = ADIAG(idx, u_count, u_texLength, u_types);
     // if (diag <= 0.0) discard;
     float e = diag
-                  - pow(Aplusi(mI) * precon(mI), 2.0)
-                  - pow(Aplusj(mJ) * precon(mJ), 2.0)
-                  - pow(Aplusk(mK) * precon(mK), 2.0)
+                  // - pow(Aplusi(mI) * precon(mI), 2.0)
+                  // - pow(Aplusj(mJ) * precon(mJ), 2.0)
+                  // - pow(Aplusk(mK) * precon(mK), 2.0)
+                  - pow(AMAT(idx, idx - ivec3(1,0,0), u_count, u_texLength, u_types) * precon(mI), 2.0)
+                  - pow(AMAT(idx, idx - ivec3(0,1,0), u_count, u_texLength, u_types) * precon(mJ), 2.0)
+                  - pow(AMAT(idx, idx - ivec3(0,0,1), u_count, u_texLength, u_types) * precon(mK), 2.0)
 
                   // - 0.97 * (
                   //   Aplusi(mI) * (

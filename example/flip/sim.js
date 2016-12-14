@@ -1203,7 +1203,7 @@ export default function (gl) {
 
             return function(t, shouldPrecondition) {
                 clearMatrices()
-                setupA(t)
+                // setupA(t)
                 setupb()
 
                 if (shouldPrecondition) {
