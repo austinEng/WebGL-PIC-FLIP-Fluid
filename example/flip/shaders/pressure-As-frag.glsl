@@ -53,13 +53,13 @@ void main() {
 
   val += Adiag(f_uv) * GET(u_pcg, f_uv, 3);
   
-  if (checkIdx(f_uv, u_count - 1)) {
+  if (checkIdx(pIi, u_count - 1)) {
     val += Aplusi(f_uv) * GET(u_pcg, pI, 3);
   }
-  if (checkIdx(f_uv, u_count - 1)) {
+  if (checkIdx(pJi, u_count - 1)) {
     val += Aplusj(f_uv) * GET(u_pcg, pJ, 3);
   }
-  if (checkIdx(f_uv, u_count - 1)) {
+  if (checkIdx(pKi, u_count - 1)) {
     val += Aplusk(f_uv) * GET(u_pcg, pK, 3);
   }
 
