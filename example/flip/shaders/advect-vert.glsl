@@ -3,7 +3,6 @@ attribute float v_id;
 uniform sampler2D u_particles;
 uniform int u_particleTexLength;
 
-uniform bool u_copy;
 uniform float u_t;
 uniform vec3 u_min;
 uniform vec3 u_max;
@@ -14,8 +13,10 @@ varying vec4 val;
 @import ./include/grid;
 
 void main() {
-    int pIdx = int(v_id) * 2;
-    int vIdx = int(v_id) * 2 + 1;
+    int pIdx = (int(v_id) / 2) * 2;
+    int vIdx = pIdx + 1;
+
+    int isPos = int(v_id) - 2*(int(v_id) / 2);
 
     int pV = pIdx / u_particleTexLength;
     int pU = pIdx - pV * u_particleTexLength;
@@ -29,7 +30,7 @@ void main() {
     vec4 pos = texture2D(u_particles, pUV);
     vec4 vel = texture2D(u_particles, vUV);
 
-    if (u_copy) {
+    if (isPos == 1) {
         val = vel;
         gl_Position = vec4(vUV * 2.0 - 1.0, -1.0, 1.0);
     } else {

@@ -83,7 +83,7 @@ renderer.add(particlePainter)
 
 function initialize(settings) { 
   var CELL_SIZE = 2 / Math.cbrt(settings.density) // ~8 particles per cell
-  var box = new BoxRegion(2*settings.density, new Bound({
+  var box = new BoxRegion(settings.density, new Bound({
     minX: -0.6, maxX: 0.0,
     minY: -0.4, maxY: 0.4,
     minZ: -0.4, maxZ: 0.4
@@ -136,7 +136,7 @@ drawloop.execStats.domElement.style.top = '48px';
 document.body.appendChild(drawloop.execStats.domElement)
 
 renderer.ready.then(() => {
-  // sim.shouldUpdate = true
+  sim.shouldUpdate = true
   drawloop.start()
 
   renderer.camera.controls.addEventListener('change', e => {
@@ -168,7 +168,7 @@ var simulationControls = {
   },
   precondition: true,
   density: 150000,  // particles per cubic meter
-  solverSteps: 20
+  solverSteps: 50
 }
 
 initialize(simulationControls)

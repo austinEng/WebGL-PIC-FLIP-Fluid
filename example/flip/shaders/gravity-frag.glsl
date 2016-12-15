@@ -16,15 +16,16 @@ void main() {
 
     ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
 
-    if (!checkIdx(idx, u_count)) {
-        discard;
-    }
+    // if (!checkIdx(idx, u_count)) {
+    //     discard;
+    // }
+    vec4 col = texture2D(gU_old, f_uv);
 
     for (int i = -1; i <= 1; ++i) {
         for (int j = -1; j <= 1; ++j) {
             for (int k = -1; k <= 1; ++k) {
                 if (checkIdx(idx + ivec3(i,j,k), u_count - 1) && gridComponentAt(u_types, idx + ivec3(i,j,k), u_count, u_texLength, 0) == 1.0) {
-                    vec4 col = texture2D(gU_old, f_uv);
+                    
                     col.g -= 9.81 * u_t;// / 10.0;
                     gl_FragColor = vec4(col.rgb, 1.0);
                     return;
@@ -32,7 +33,6 @@ void main() {
             }
         }  
     }
-    discard;
-
-    
+    // discard;
+    gl_FragColor = col;
 }

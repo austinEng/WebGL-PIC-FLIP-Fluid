@@ -108,10 +108,9 @@ export function _ParticleBuffer(gl) {
       },
 
       swap() {
-        particleBuffer.B = [particleBuffer.A, particleBuffer.A = particleBuffer.B][0]
-        // var temp = particleBuffer.A
-        // particleBuffer.A = particleBuffer.B
-        // particleBuffer.B = temp
+        var temp = particleBuffer.A
+        particleBuffer.A = particleBuffer.B
+        particleBuffer.B = temp
       },
 
       buffer: null
