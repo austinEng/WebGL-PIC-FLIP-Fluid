@@ -5,7 +5,7 @@ by [Austin Eng](http://austineng.github.io)
 1. [Overview](#overview)
 2. [Debug Views](#debug-views)
 3. [Techniques](#techniques)
-4. [Building & Running] (#build)
+4. [Build & Running](#build)
 
 ## Overview
 
@@ -41,7 +41,7 @@ The following will be an abbreviated breakdown of how all of the steps in the fl
 
 ### Particle-to-Grid
 
-This first step is a fairly tricky and annoying part of the solve. For every particle, we need to project it's velocity to possibly 3*27 = 81 different locations. There are three grids to project onto (U, V, W for X, Y, Z velocities) but we need to project onto the 27 cells in our direct neighborhood. To do this, we do exactly that. For every particle, we render 81 gl.POINTS. In practice, this is calling `gl.drawArrays(pointBuffer, 0, 81*pointCount)`.
+This first step is a fairly tricky and annoying part of the solve. For every particle, we need to project it's velocity to possibly 3x27 = 81 different locations. There are three grids to project onto (U, V, W for X, Y, Z velocities) but we need to project onto the 27 cells in our direct neighborhood. To do this, we do exactly that. For every particle, we render 81 gl.POINTS. In practice, this is calling `gl.drawArrays(pointBuffer, 0, 81*pointCount)`.
 
 We number these points with increasing values so that in the vertex shader we can correctly compute which grid we are to project onto. After calculating the correct grid and grid location, we compute the UV coordinate of that position and set glPosition accordingly.
 
