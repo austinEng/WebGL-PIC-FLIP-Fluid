@@ -60,22 +60,22 @@ void main() {
   );
 
   if (idx.x == 0 || (checkIdx(mIi, u_count - 1) && mIt == 2.0)) {
-    div -= -u_scale * texture2D(u_A, f_uv)[0];
+    div -= u_scale * texture2D(u_A, f_uv)[0];
   }
   if (idx.x == u_count.x - 2 || (checkIdx(pIi, u_count - 1) && pIt == 2.0)) {
-    div += -u_scale * texture2D(u_A, pI)[0];
+    div += u_scale * texture2D(u_A, pI)[0];
   }
   if (idx.y == 0 || (checkIdx(mJi, u_count - 1) && mJt == 2.0)) {
-    div -= -u_scale * texture2D(u_A, f_uv)[1];
+    div -= u_scale * texture2D(u_A, f_uv)[1];
   }
   if (idx.y == u_count.y - 2 || (checkIdx(pJi, u_count - 1) && pJt == 2.0)) {
-    div += -u_scale * texture2D(u_A, pJ)[1];
+    div += u_scale * texture2D(u_A, pJ)[1];
   }
   if (idx.z == 0 || (checkIdx(mKi, u_count - 1) && mKt == 2.0)) {
-    div -= -u_scale * texture2D(u_A, f_uv)[2];
+    div -= u_scale * texture2D(u_A, f_uv)[2];
   }
   if (idx.z == u_count.z - 2 || (checkIdx(pKi, u_count - 1) && pKt == 2.0)) {
-    div += -u_scale * texture2D(u_A, pK)[2];
+    div += u_scale * texture2D(u_A, pK)[2];
   }
 
                   //  p   r   z  s <-- initial search dir is residual

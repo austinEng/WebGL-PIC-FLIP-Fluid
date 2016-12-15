@@ -63,6 +63,7 @@ void main() {
         );
 
         val.rgb = 0.95 * (vel.rgb + (velA - velB)) + 0.05 * velA;
+        // val.rgb = velA;
         val.a = vel.w;
         // val = vel + (velA - velB);
         gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);

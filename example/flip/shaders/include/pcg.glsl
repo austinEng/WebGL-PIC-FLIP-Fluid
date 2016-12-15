@@ -25,12 +25,12 @@ float ADIAG(ivec3 idx, ivec3 count, int texLength, sampler2D types) {
     // return 0.0;
   }
 
-  if (checkIdx(mIi, count - 1) && texture2D(types, mI)[0] == 2.0) diag--;
-  if (checkIdx(mJi, count - 1) && texture2D(types, mJ)[0] == 2.0) diag--;
-  if (checkIdx(mKi, count - 1) && texture2D(types, mK)[0] == 2.0) diag--;
-  if (checkIdx(pIi, count - 1) && texture2D(types, pI)[0] == 2.0) diag--;
-  if (checkIdx(pJi, count - 1) && texture2D(types, pJ)[0] == 2.0) diag--;
-  if (checkIdx(pKi, count - 1) && texture2D(types, pK)[0] == 2.0) diag--;
+  if (!checkIdx(mIi, count - 1) || texture2D(types, mI)[0] == 2.0) diag--;
+  if (!checkIdx(mJi, count - 1) || texture2D(types, mJ)[0] == 2.0) diag--;
+  if (!checkIdx(mKi, count - 1) || texture2D(types, mK)[0] == 2.0) diag--;
+  if (!checkIdx(pIi, count - 1) || texture2D(types, pI)[0] == 2.0) diag--;
+  if (!checkIdx(pJi, count - 1) || texture2D(types, pJ)[0] == 2.0) diag--;
+  if (!checkIdx(pKi, count - 1) || texture2D(types, pK)[0] == 2.0) diag--;
 
   return diag;
 }

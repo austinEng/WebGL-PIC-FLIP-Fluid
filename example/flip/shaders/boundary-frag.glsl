@@ -13,6 +13,8 @@ varying vec2 f_uv;
 
 @import ./include/grid;
 
+#define CELL_TYPE(offset) (checkIdx(idx + offset, u_count - 1) ? int(texture2D(u_types, XYZtoUV(idx + offset, u_texLength, u_count))[0]) : -1)
+
 void main() {
     // ivec3 count = gridCount(vec3(0.5, 0.5, 0.5) * u_cellSize, u_max, u_min, u_cellSize);
     // ivec3 idx = UVtoXYZ(f_uv, u_texLength, count);
@@ -31,6 +33,13 @@ void main() {
     ivec3 up = idx + ivec3(0,0,0);
     ivec3 back = idx - ivec3(0,0,1);
     ivec3 front = idx + ivec3(0,0,0);
+
+    int leftType = CELL_TYPE(ivec3(-1,0,0));
+    int rightType = CELL_TYPE(ivec3(0,0,0));
+    int downType = CELL_TYPE(ivec3(0,-1,0));
+    int upType = CELL_TYPE(ivec3(0,0,0));
+    int backType = CELL_TYPE(ivec3(0,0,-1));
+    int frontType = CELL_TYPE(ivec3(0,0,0));
 
     // set adjacent to solid to 0
     if (checkIdx(left, u_count - 1) && gridComponentAt(u_types, left, u_count, u_texLength, 0) == 2.0) {
@@ -64,6 +73,18 @@ void main() {
     if (idx.x == u_count.x - 1) current.x = min(0.0, current.x);
     if (idx.y == u_count.y - 1) current.y = min(0.0, current.y);
     if (idx.z == u_count.z - 1) current.z = min(0.0, current.z);
+
+    if (leftType == 2 || rightType == 2) {
+      current[0] = 0.0;
+    }
+
+    if (downType == 2 || upType == 2) {
+      current[1] = 0.0;
+    }
+
+    if (backType == 2 || frontType == 2) {
+      current[2] = 0.0;
+    }
 
     gl_FragColor = current;
 }

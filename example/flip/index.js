@@ -83,17 +83,17 @@ renderer.add(particlePainter)
 
 function initialize(settings) { 
   var CELL_SIZE = 2 / Math.cbrt(settings.density) // ~8 particles per cell
-  var box = new BoxRegion(8*settings.density, new Bound({
-    minX: -0.2, maxX: 0.2,
-    minY: -0.3, maxY: 0.3,
-    minZ: -0.2, maxZ: 0.2
+  var box = new BoxRegion(2*settings.density, new Bound({
+    minX: -0.6, maxX: 0.0,
+    minY: -0.4, maxY: 0.4,
+    minZ: -0.4, maxZ: 0.4
   }))
   var particles = new ParticleBuffer()
   particles.addRegion(box)
   particles.create()
 
   var grid = new MACGrid(new Bound({
-    minX: -0.5, maxX: 0.5,
+    minX: -0.8, maxX: 0.8,
     minY: -0.5, maxY: 0.5,
     minZ: -0.5, maxZ: 0.5
   }), CELL_SIZE)
@@ -167,7 +167,7 @@ var simulationControls = {
     drawloop.start()
   },
   precondition: true,
-  density: 100000,  // particles per cubic meter
+  density: 150000,  // particles per cubic meter
   solverSteps: 20
 }
 

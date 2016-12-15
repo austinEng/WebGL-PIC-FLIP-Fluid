@@ -1427,6 +1427,7 @@ export default function (gl) {
             var u_copy = gl.getUniformLocation(prog, "u_copy")
             var u_min = gl.getUniformLocation(prog, "u_min")
             var u_max = gl.getUniformLocation(prog, "u_max")
+            var u_offset = gl.getUniformLocation(prog, "u_offset")
 
             return function(t) {
                 gl.useProgram(prog)
@@ -1447,6 +1448,7 @@ export default function (gl) {
                 gl.uniform3fv(u_min, grid.min)
                 gl.uniform3fv(u_max, grid.max)
                 gl.uniform1i(u_particleTexLength, particles.textureLength)
+                gl.uniform1f(u_offset, 0.05*grid.cellSize)
 
                 gl.bindBuffer(gl.ARRAY_BUFFER, particles.ids)
                 gl.enableVertexAttribArray(v_id)
