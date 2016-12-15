@@ -1,6 +1,6 @@
 module.exports = {
   entry: {
-    "example/flip": "./example/flip/index.js"
+    "demo": "./demo/index.js"
   },
   output: {
       path: __dirname,
