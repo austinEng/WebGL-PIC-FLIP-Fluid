@@ -76,7 +76,7 @@ Given a residual vector `r`, we want compute `z = Mr`, where `M` is an approxima
 For each entry in `r`:
 
   1.  Set `z[i] = r[i] - r * L[i, :] * 1/d`. This is easy because `L` is sparse and has just 3 items in row i. `d` is just the diagonal entry corresponding to *row* i.
-  2. Set `z[i] = z[i] - z * L[i, :] * 1/d`. This is easy because `L` is sparse and has just 3 items in column i. `d` is just the diagonal entry corresponding to *column* i.
+  2. Set `z[i] = z[i] - z * L[i, :] * 1/d`. This is easy because `L` is sparse and has just 3 items in row i. `d` is just the diagonal entry corresponding to *column* i.
 
 
 __Dot Products__
