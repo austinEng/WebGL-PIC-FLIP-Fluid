@@ -118,7 +118,7 @@ var simulationControls = {
   ipp: true,
   density: 500000,  // particles per cubic meter
   solverSteps: 100,
-  smooth: 10
+  smooth: 5
 }
 
 initialize(simulationControls)

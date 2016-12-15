@@ -53,16 +53,16 @@ void main() {
             gridComponentInterpolate(u_gOld, pos.rgb, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)
         );
 
-        velA = vec3(
-            gridComponentInterpolate(u_gA, pos.rgb + velA * u_t * 0.5, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),
-            gridComponentInterpolate(u_gA, pos.rgb + velA * u_t * 0.5, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),
-            gridComponentInterpolate(u_gA, pos.rgb + velA * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)
-        );
-        velB = vec3(
-            gridComponentInterpolate(u_gOld, pos.rgb + velB * u_t * 0.5, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),
-            gridComponentInterpolate(u_gOld, pos.rgb + velB * u_t * 0.5, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),
-            gridComponentInterpolate(u_gOld, pos.rgb + velB * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)
-        );
+        // velA = vec3(
+        //     gridComponentInterpolate(u_gA, pos.rgb + velA * u_t * 0.5, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),
+        //     gridComponentInterpolate(u_gA, pos.rgb + velA * u_t * 0.5, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),
+        //     gridComponentInterpolate(u_gA, pos.rgb + velA * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)
+        // );
+        // velB = vec3(
+        //     gridComponentInterpolate(u_gOld, pos.rgb + velB * u_t * 0.5, u_min, -vec3(0,0.5,0.5), u_count, u_gridTexLength, u_cellSize, 0),
+        //     gridComponentInterpolate(u_gOld, pos.rgb + velB * u_t * 0.5, u_min, -vec3(0.5,0,0.5), u_count, u_gridTexLength, u_cellSize, 1),
+        //     gridComponentInterpolate(u_gOld, pos.rgb + velB * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)
+        // );
 
         val.rgb = (1.0 - u_smooth) * (vel.rgb + (velA - velB)) + u_smooth * velA;
         // val.rgb = velA;
