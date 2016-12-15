@@ -57,7 +57,7 @@ void main() {
     }
 
     float d = distance(fIdx, vec3(iIdx) + cellOffset);
-    float weight = max(1.0 - d*d / 1.0, 0.0);
+    float weight = max(1.0 - d*d / 2.0, 0.0);
 
     vel = vec4(0.0, 0.0, 0.0, 0.0);
     if (u_g == 0) {

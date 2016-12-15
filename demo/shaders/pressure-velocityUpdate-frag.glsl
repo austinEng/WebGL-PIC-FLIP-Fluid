@@ -53,17 +53,5 @@ void main() {
     );
   }
 
-  // if (leftType == 2 || rightType == 2) {
-  //   current[0] = 0.0;
-  // }
-
-  // if (downType == 2 || upType == 2) {
-  //   current[1] = 0.0;
-  // }
-
-  // if (backType == 2 || frontType == 2) {
-  //   current[2] = 0.0;
-  // }
-
   gl_FragColor = current;
 }

@@ -9,6 +9,10 @@ export default function (gl) {
       // this.bound = bound
       this.min = vec3.fromValues(bound.minX, bound.minY, bound.minZ)
       this.max = vec3.fromValues(bound.maxX, bound.maxY, bound.maxZ)
+      vec3.set(this.max, 
+        this.min[0] + cellSize * Math.ceil((this.max[0] - this.min[0]) / cellSize),
+        this.min[1] + cellSize * Math.ceil((this.max[1] - this.min[1]) / cellSize),
+        this.min[2] + cellSize * Math.ceil((this.max[2] - this.min[2]) / cellSize))
       this.cellSize = cellSize
 
       this.count = vec3.create();

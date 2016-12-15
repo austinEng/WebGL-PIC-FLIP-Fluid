@@ -20,9 +20,9 @@ void main() {
   ivec3 idx = UVtoXYZ(f_uv, u_texLength, u_count);
   // ivec3 idx = toXYZ(id / 6, u_count);
   
-  if (!(gridAt(u_types, idx, u_count, u_texLength)[0] == 1.0 || gridAt(u_types, idx, u_count, u_texLength)[0] == 3.0)) {
-    discard;
-  }
+  // if (!(gridAt(u_types, idx, u_count, u_texLength)[0] == 1.0 || gridAt(u_types, idx, u_count, u_texLength)[0] == 3.0)) {
+  //   discard;
+  // }
 
   if (!checkIdx(idx, u_count - 1)) discard;
 
@@ -53,28 +53,32 @@ void main() {
   float pJt = texture2D(u_types, pJ)[0];
   float pKt = texture2D(u_types, pK)[0];
 
-  float div = -u_scale * (
-    texture2D(u_A, pI)[0] - texture2D(u_A, f_uv)[0] +
-    texture2D(u_A, pJ)[1] - texture2D(u_A, f_uv)[1] +
-    texture2D(u_A, pK)[2] - texture2D(u_A, f_uv)[2]
-  );
+  float div = 0.0;
+  
+  if (gridAt(u_types, idx, u_count, u_texLength)[0] == 1.0) {
+    div -= u_scale * (
+      texture2D(u_A, pI)[0] - texture2D(u_A, f_uv)[0] +
+      texture2D(u_A, pJ)[1] - texture2D(u_A, f_uv)[1] +
+      texture2D(u_A, pK)[2] - texture2D(u_A, f_uv)[2]
+    );
+  }
 
-  if (idx.x == 0 || (checkIdx(mIi, u_count - 1) && mIt == 2.0)) {
+  if (idx.x <= 0 || (checkIdx(mIi, u_count - 1) && mIt == 2.0)) {
     div -= u_scale * texture2D(u_A, f_uv)[0];
   }
-  if (idx.x == u_count.x - 2 || (checkIdx(pIi, u_count - 1) && pIt == 2.0)) {
+  if (idx.x >= u_count.x - 2 || (checkIdx(pIi, u_count - 1) && pIt == 2.0)) {
     div += u_scale * texture2D(u_A, pI)[0];
   }
-  if (idx.y == 0 || (checkIdx(mJi, u_count - 1) && mJt == 2.0)) {
+  if (idx.y <= 0 || (checkIdx(mJi, u_count - 1) && mJt == 2.0)) {
     div -= u_scale * texture2D(u_A, f_uv)[1];
   }
-  if (idx.y == u_count.y - 2 || (checkIdx(pJi, u_count - 1) && pJt == 2.0)) {
+  if (idx.y >= u_count.y - 2 || (checkIdx(pJi, u_count - 1) && pJt == 2.0)) {
     div += u_scale * texture2D(u_A, pJ)[1];
   }
-  if (idx.z == 0 || (checkIdx(mKi, u_count - 1) && mKt == 2.0)) {
+  if (idx.z <= 0 || (checkIdx(mKi, u_count - 1) && mKt == 2.0)) {
     div -= u_scale * texture2D(u_A, f_uv)[2];
   }
-  if (idx.z == u_count.z - 2 || (checkIdx(pKi, u_count - 1) && pKt == 2.0)) {
+  if (idx.z >= u_count.z - 2 || (checkIdx(pKi, u_count - 1) && pKt == 2.0)) {
     div += u_scale * texture2D(u_A, pK)[2];
   }
 

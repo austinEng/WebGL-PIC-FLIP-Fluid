@@ -1515,7 +1515,7 @@ export default function (gl) {
             var u_t = gl.getUniformLocation(prog, "u_t")
             var u_min = gl.getUniformLocation(prog, "u_min")
             var u_max = gl.getUniformLocation(prog, "u_max")
-            var u_offset = gl.getUniformLocation(prog, "u_offset")
+            // var u_offset = gl.getUniformLocation(prog, "u_offset")
 
             var pointCount = 2*particles.length
             var pointBuffer = gl.createBuffer()
@@ -1539,7 +1539,7 @@ export default function (gl) {
                 gl.uniform3fv(u_min, grid.min)
                 gl.uniform3fv(u_max, grid.max)
                 gl.uniform1i(u_particleTexLength, particles.textureLength)
-                gl.uniform1f(u_offset, 0.05*grid.cellSize)
+                // gl.uniform1f(u_offset, grid.cellSize)
 
                 gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer)
                 gl.enableVertexAttribArray(v_id)
@@ -1570,6 +1570,8 @@ export default function (gl) {
                 markCells();
 
                 gravityUpdate(t);
+
+                enforceBoundary();
 
                 pressureSolve(t, settings);
 

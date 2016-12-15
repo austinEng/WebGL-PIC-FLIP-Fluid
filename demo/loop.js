@@ -6,7 +6,7 @@ export default function(shouldUpdate, update) {
   var lastTime = 0;
   var frameRequest;
   var running = false;
-  var execStats = new Stats()
+  // var execStats = new Stats()
   var frameStats = new Stats()
   
   function tick(total) {
@@ -14,9 +14,9 @@ export default function(shouldUpdate, update) {
     frameStats.end()
     lastTime = total;
 
-    execStats.begin()
+    // execStats.begin()
     update(elapsed)
-    execStats.end()
+    // execStats.end()
 
     if (shouldUpdate()) {
       running = true
@@ -48,7 +48,7 @@ export default function(shouldUpdate, update) {
     },
     start,
     stop,
-    execStats,
+    // execStats,
     frameStats
   }
 }

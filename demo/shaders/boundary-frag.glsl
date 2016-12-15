@@ -42,22 +42,22 @@ void main() {
     int frontType = CELL_TYPE(ivec3(0,0,0));
 
     // set adjacent to solid to 0
-    if (checkIdx(left, u_count - 1) && gridComponentAt(u_types, left, u_count, u_texLength, 0) == 2.0) {
+    if (leftType == 2 || leftType == -1) {
       current[0] = max(current[0], 0.0);
     }
-    if (checkIdx(right, u_count - 1) && gridComponentAt(u_types, right, u_count, u_texLength, 0) == 2.0) {
+    if (rightType == 2 || rightType == -1) {
       current[0] = min(current[0], 0.0);
     }
-    if (checkIdx(down, u_count - 1) && gridComponentAt(u_types, down, u_count, u_texLength, 0) == 2.0) {
+    if (downType == 2 || downType == -1) {
       current[1] = max(current[1], 0.0);
     }
-    if (checkIdx(up, u_count - 1) && gridComponentAt(u_types, up, u_count, u_texLength, 0) == 2.0) {
+    if (upType == 2 || upType == -1) {
       current[1] = min(current[1], 0.0);
     }
-    if (checkIdx(back, u_count - 1) && gridComponentAt(u_types, back, u_count, u_texLength, 0) == 2.0) {
+    if (backType == 2 || backType == -1) {
       current[2] = max(current[2], 0.0);
     }
-    if (checkIdx(front, u_count - 1) && gridComponentAt(u_types, front, u_count, u_texLength, 0) == 2.0) {
+    if (frontType == 2 || frontType == -1) {
       current[2] = min(current[2], 0.0);
     }
 
@@ -74,17 +74,17 @@ void main() {
     if (idx.y == u_count.y - 1) current.y = min(0.0, current.y);
     if (idx.z == u_count.z - 1) current.z = min(0.0, current.z);
 
-    if (leftType == 2 || rightType == 2) {
-      current[0] = 0.0;
-    }
+    // if (leftType == 2 || rightType == 2) {
+    //   current[0] = 0.0;
+    // }
 
-    if (downType == 2 || upType == 2) {
-      current[1] = 0.0;
-    }
+    // if (downType == 2 || upType == 2) {
+    //   current[1] = 0.0;
+    // }
 
-    if (backType == 2 || frontType == 2) {
-      current[2] = 0.0;
-    }
+    // if (backType == 2 || frontType == 2) {
+    //   current[2] = 0.0;
+    // }
 
     gl_FragColor = current;
 }
