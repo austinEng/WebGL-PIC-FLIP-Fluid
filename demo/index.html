@@ -12,11 +12,35 @@
         height: 100%;
         background-color: #222;
       }
+
+      #github-link {
+        position: absolute;
+        right: 0px;
+        bottom: 0px;
+        color: white;
+        height: 30px;
+        padding: 8px;
+      }
+
+      #github-link img {
+        height: 100%;
+        float: left;
+      }
+
+      #github-link span {
+        padding-top: 8px;
+        padding-left: 5px;
+        display: inline-block;
+      }
     </style>
   </head>
 
   <body>
     <canvas id="canvas"></canvas>
+    <a id="github-link" href="https://github.com/austinEng/WebGL-PIC-FLIP-Fluid">
+      <span>Check it out on Github!</span>
+      <img src="Github-Mark-Light-64px.png" />
+    </a>
     <script src="bundle.js"></script>
   </body>
 </html>
