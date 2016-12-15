@@ -32,7 +32,7 @@ renderer.add(particlePainter)
 
 function initialize(settings) { 
   var CELL_SIZE = 2 / Math.cbrt(settings.density) // ~8 particles per cell
-  var box = new BoxRegion(settings.density, new Bound({
+  var box = new BoxRegion(4*settings.density, new Bound({
     minX: -0.6, maxX: 0.0,
     minY: -0.4, maxY: 0.4,
     minZ: -0.4, maxZ: 0.4
@@ -77,11 +77,11 @@ drawloop.frameStats.domElement.style.left = '0px';
 drawloop.frameStats.domElement.style.top = '0px';
 document.body.appendChild(drawloop.frameStats.domElement)
 
-drawloop.execStats.setMode(1)
-drawloop.execStats.domElement.style.position = 'absolute';
-drawloop.execStats.domElement.style.left = '0px';
-drawloop.execStats.domElement.style.top = '48px';
-document.body.appendChild(drawloop.execStats.domElement)
+// drawloop.execStats.setMode(1)
+// drawloop.execStats.domElement.style.position = 'absolute';
+// drawloop.execStats.domElement.style.left = '0px';
+// drawloop.execStats.domElement.style.top = '48px';
+// document.body.appendChild(drawloop.execStats.domElement)
 
 renderer.ready.then(() => {
   sim.shouldUpdate = true
@@ -116,7 +116,7 @@ var simulationControls = {
   },
   precondition: true,
   ipp: true,
-  density: 500000,  // particles per cubic meter
+  density: 100000,  // particles per cubic meter
   solverSteps: 100,
   smooth: 5
 }
@@ -152,4 +152,4 @@ display.add(gridPainter, 'drawr').onChange(drawloop.start)
 display.add(gridPainter, 'drawz').onChange(drawloop.start)
 display.add(gridPainter, 'draws').onChange(drawloop.start)
 display.add(gridPainter, 'drawMIC').onChange(drawloop.start)
-display.open()
+// display.open()

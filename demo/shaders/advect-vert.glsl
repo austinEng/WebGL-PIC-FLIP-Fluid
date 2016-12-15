@@ -6,7 +6,6 @@ uniform int u_particleTexLength;
 uniform float u_t;
 uniform vec3 u_min;
 uniform vec3 u_max;
-uniform float u_offset;
 
 varying vec4 val;
 
@@ -34,7 +33,8 @@ void main() {
         val = vel;
         gl_Position = vec4(vUV * 2.0 - 1.0, -1.0, 1.0);
     } else {
-        val = vec4(clamp(pos.rgb + vel.rgb * u_t, u_min + u_offset, u_max - u_offset), pos.w);
+        vec3 nPos = pos.rgb + vel.rgb * u_t;
+        val = vec4(clamp(nPos, u_min, u_max), pos.w);
         gl_Position = vec4(pUV * 2.0 - 1.0, -1.0, 1.0);
     }
     
