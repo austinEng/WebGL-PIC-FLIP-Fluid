@@ -2,6 +2,7 @@
 precision highp float;
 
 @import ./include/grid;
+@import ./include/pcg;
 
 uniform ivec3 u_count;
 uniform sampler2D u_A;
@@ -65,6 +66,9 @@ void main() {
         - Aplusi(mI) * precon(mI) * GET(u_q, mI, 0)
         - Aplusj(mJ) * precon(mJ) * GET(u_q, mJ, 0)
         - Aplusk(mK) * precon(mK) * GET(u_q, mK, 0);
+        // - AMAT(idx, idx - ivec3(1,0,0), u_count, u_texLength, u_types) * precon(mI) * GET(u_q, mI, 0)
+        // - AMAT(idx, idx - ivec3(0,1,0), u_count, u_texLength, u_types) * precon(mJ) * GET(u_q, mJ, 0)
+        // - AMAT(idx, idx - ivec3(0,0,1), u_count, u_texLength, u_types) * precon(mK) * GET(u_q, mK, 0);
       curr[0] = t * precon(f_uv);
     }
 
@@ -76,6 +80,9 @@ void main() {
         - Aplusi(f_uv) * precon(f_uv) * GET(u_pcg, pI, 2)
         - Aplusj(f_uv) * precon(f_uv) * GET(u_pcg, pJ, 2)
         - Aplusk(f_uv) * precon(f_uv) * GET(u_pcg, pK, 2);
+        // - AMAT(idx, idx + ivec3(1,0,0), u_count, u_texLength, u_types) * precon(f_uv) * GET(u_pcg, pI, 2)
+        // - AMAT(idx, idx + ivec3(0,1,0), u_count, u_texLength, u_types) * precon(f_uv) * GET(u_pcg, pJ, 2)
+        // - AMAT(idx, idx + ivec3(0,0,1), u_count, u_texLength, u_types) * precon(f_uv) * GET(u_pcg, pK, 2);
       curr[2] = t * precon(f_uv);
       if (u_setS) curr[3] = curr[2];
       // curr = vec4(float(idx.x), float(idx.y), float(idx.z), curr[2]);

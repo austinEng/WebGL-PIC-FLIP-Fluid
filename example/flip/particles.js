@@ -38,7 +38,7 @@ export function _ParticleBuffer(gl) {
           particles.push(x)
           particles.push(y)
           particles.push(z)
-          particles.push(0) // filler
+          particles.push(Math.random()) // filler
           particles.push(0)
           particles.push(0)
           particles.push(0)
@@ -108,10 +108,9 @@ export function _ParticleBuffer(gl) {
       },
 
       swap() {
-        particleBuffer.B = [particleBuffer.A, particleBuffer.A = particleBuffer.B][0]
-        // var temp = particleBuffer.A
-        // particleBuffer.A = particleBuffer.B
-        // particleBuffer.B = temp
+        var temp = particleBuffer.A
+        particleBuffer.A = particleBuffer.B
+        particleBuffer.B = temp
       },
 
       buffer: null

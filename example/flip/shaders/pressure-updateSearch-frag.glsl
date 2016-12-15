@@ -19,6 +19,7 @@ void main() {
   float beta = sigmanew / sigma;
 
   if (((sigma <= 0.0 || 0.0 <= sigma) ? false : true)) beta = 0.0;
+  if (sigma == 0.0) beta = 0.0;
 
   curr[3] = curr[2] + beta*curr[3];
   // curr[3] = curr[2] + u_beta*curr[3];

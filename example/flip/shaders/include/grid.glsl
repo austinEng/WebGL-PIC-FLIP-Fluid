@@ -32,9 +32,10 @@ vec4 gridAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength) {
 float gridComponentAt(sampler2D grid, ivec3 idx, ivec3 count, int texLength, int c) {
     vec2 uv = XYZtoUV(idx, texLength, count);
     
-    for (int i = 0; i < 4; ++i) {
-        if (i == c) return texture2D(grid, uv)[i];
-    }
+    if (c == 0) return texture2D(grid, uv)[0];
+    if (c == 1) return texture2D(grid, uv)[1];
+    if (c == 2) return texture2D(grid, uv)[2];
+    if (c == 3) return texture2D(grid, uv)[3];
     return 0.0;
 }
 
@@ -62,8 +63,8 @@ vec4 gridInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, ivec3 coun
     
     vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;
     fIdx = clamp(fIdx, vec3(0,0,0), fIdx);
-    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));
-    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));
+    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count - 1));
+    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));
 
     vec4 lll = gridAt(grid, ivec3(l.x, l.y, l.z), count, texLength);
     vec4 llU = gridAt(grid, ivec3(l.x, l.y, U.z), count, texLength);
@@ -89,8 +90,8 @@ float gridComponentInterpolate(sampler2D grid, vec3 pos, vec3 min, vec3 offset, 
     
     vec3 fIdx = fractionalIndexOf(pos, min, cellSize) + offset;
     fIdx = clamp(fIdx, vec3(0,0,0), fIdx);
-    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count));
-    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count));
+    vec3 l = clamp(floor(fIdx), vec3(0,0,0), vec3(count - 1));
+    vec3 U = clamp(ceil(fIdx), vec3(0,0,0), vec3(count - 1));
 
     float lll = gridComponentAt(grid, ivec3(l.x, l.y, l.z), count, texLength, c);
     float llU = gridComponentAt(grid, ivec3(l.x, l.y, U.z), count, texLength, c);

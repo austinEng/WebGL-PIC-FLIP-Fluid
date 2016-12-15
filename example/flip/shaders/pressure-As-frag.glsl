@@ -11,6 +11,7 @@ uniform float u_scale;
 varying vec2 f_uv;
 
 @import ./include/grid;
+@import ./include/pcg;
 
 #define GET(grid, uv, c) (texture2D(grid, uv)[c])
 #define Aplusi(uv) GET(u_A, uv, 0)
@@ -43,24 +44,31 @@ void main() {
   float val = 0.0;
   if (checkIdx(mIi, u_count - 1)) {
     val += Aplusi(mI) * GET(u_pcg, mI, 3);
+    // val += AMAT(idx, idx - ivec3(1,0,0), u_count, u_texLength, u_types) * GET(u_pcg, mI, 3);
   }
   if (checkIdx(mJi, u_count - 1)) {
     val += Aplusj(mJ) * GET(u_pcg, mJ, 3);
+    // val += AMAT(idx, idx - ivec3(0,1,0), u_count, u_texLength, u_types) * GET(u_pcg, mJ, 3);
   }
   if (checkIdx(mKi, u_count - 1)) {
     val += Aplusk(mK) * GET(u_pcg, mK, 3);
+    // val += AMAT(idx, idx - ivec3(0,0,1), u_count, u_texLength, u_types) * GET(u_pcg, mK, 3);
   }
 
   val += Adiag(f_uv) * GET(u_pcg, f_uv, 3);
+  // val += ADIAG(idx, u_count, u_texLength, u_types) * GET(u_pcg, f_uv, 3);
   
   if (checkIdx(pIi, u_count - 1)) {
     val += Aplusi(f_uv) * GET(u_pcg, pI, 3);
+    // val += AMAT(idx, idx + ivec3(1,0,0), u_count, u_texLength, u_types) * GET(u_pcg, pI, 3);
   }
   if (checkIdx(pJi, u_count - 1)) {
     val += Aplusj(f_uv) * GET(u_pcg, pJ, 3);
+    // val += AMAT(idx, idx + ivec3(0,1,0), u_count, u_texLength, u_types) * GET(u_pcg, pJ, 3);
   }
   if (checkIdx(pKi, u_count - 1)) {
     val += Aplusk(f_uv) * GET(u_pcg, pK, 3);
+    // val += AMAT(idx, idx + ivec3(0,0,1), u_count, u_texLength, u_types) * GET(u_pcg, pK, 3);
   }
 
   curr[2] = u_scale * val;

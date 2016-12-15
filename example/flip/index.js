@@ -84,16 +84,16 @@ renderer.add(particlePainter)
 function initialize(settings) { 
   var CELL_SIZE = 2 / Math.cbrt(settings.density) // ~8 particles per cell
   var box = new BoxRegion(settings.density, new Bound({
-    minX: -0.2, maxX: 0.2,
-    minY: -0.3, maxY: 0.3,
-    minZ: -0.2, maxZ: 0.2
+    minX: -0.6, maxX: 0.0,
+    minY: -0.4, maxY: 0.4,
+    minZ: -0.4, maxZ: 0.4
   }))
   var particles = new ParticleBuffer()
   particles.addRegion(box)
   particles.create()
 
   var grid = new MACGrid(new Bound({
-    minX: -0.5, maxX: 0.5,
+    minX: -0.8, maxX: 0.8,
     minY: -0.5, maxY: 0.5,
     minZ: -0.5, maxZ: 0.5
   }), CELL_SIZE)
@@ -104,7 +104,7 @@ function initialize(settings) {
   sim = Sim(grid, particles, settings.solverSteps)
 }
 
-var STEP_SIZE = 1 / 60 / 2;
+var STEP_SIZE = 1 / 60;
 
 var drawloop = Loop(
   () => {
@@ -136,7 +136,7 @@ drawloop.execStats.domElement.style.top = '48px';
 document.body.appendChild(drawloop.execStats.domElement)
 
 renderer.ready.then(() => {
-  // sim.shouldUpdate = true
+  sim.shouldUpdate = true
   drawloop.start()
 
   renderer.camera.controls.addEventListener('change', e => {
@@ -167,8 +167,8 @@ var simulationControls = {
     drawloop.start()
   },
   precondition: true,
-  density: 100000,  // particles per cubic meter
-  solverSteps: 10
+  density: 150000,  // particles per cubic meter
+  solverSteps: 50
 }
 
 initialize(simulationControls)

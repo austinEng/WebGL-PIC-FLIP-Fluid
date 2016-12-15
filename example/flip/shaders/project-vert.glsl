@@ -5,16 +5,19 @@ uniform ivec3 u_goffset;
 uniform float u_cellSize;
 uniform int u_texLength;
 uniform int u_g;
+uniform bool u_weights;
 
 attribute float v_id;
 uniform sampler2D u_particles;
 uniform int u_particleTexLength;
+varying float keep;
 
 varying vec4 vel;
 
 @import ./include/grid;
 
 void main() {
+    keep = 1.0;
 
     int pIdx = int(v_id) * 2;
     int vIdx = int(v_id) * 2 + 1;
@@ -49,21 +52,32 @@ void main() {
         any(lessThan(vec3(iIdx), vec3(0,0,0))) || 
         any(greaterThanEqual(vec3(iIdx), floor(vec3(u_count) - cellOffset)))
     ) {   
-        gl_PointSize = 0.0;
-        gl_Position = vec4(vec3(10000),1);
+        keep = 0.0;
         return;
     }
 
     float d = distance(fIdx, vec3(iIdx) + cellOffset);
     float weight = max(1.0 - d*d / 1.0, 0.0);
 
-    vel = vec4(0.0, 0.0, 0.0, weight);
+    vel = vec4(0.0, 0.0, 0.0, 0.0);
     if (u_g == 0) {
-        vel[0] = weight * v_vel.x;
+        if (u_weights) {
+            vel[0] = weight;
+        } else {
+            vel[0] = weight * v_vel.x;
+        }
     } else if (u_g == 1) {
-        vel[1] = weight * v_vel.y;
+        if (u_weights) {
+            vel[1] = weight;
+        } else {
+            vel[1] = weight * v_vel.y;
+        }
     } else if (u_g == 2) {
-        vel[2] = weight * v_vel.z;
+        if (u_weights) {
+            vel[2] = weight;
+        } else {
+            vel[2] = weight * v_vel.z;
+        }
     }
 
     int flatIdx = toFlat(iIdx, u_count);
