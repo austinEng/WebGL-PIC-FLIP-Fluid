@@ -20,15 +20,12 @@ function Camera(canvas) {
 
 export default function Renderer(gl) {
 
-  var camera, webgl2Enabled;
+  var camera
   var rendererReady
   var canvas = gl.canvas
   var drawables = []
 
   function setup() {
-    webgl2Enabled = window.WebGL2RenderingContext && (gl instanceof window.WebGL2RenderingContext)
-    if (!webgl2Enabled) console.warn("WebGL 2 not supported. Falling back to WebGL 1")
-    
     camera = Camera(canvas)
     camera.position.set(3,1,12);
   }
@@ -36,7 +33,6 @@ export default function Renderer(gl) {
   var cameraMat = new THREE.Matrix4();
   function draw() {
     camera.controls.update()
-    // gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
     camera.updateMatrixWorld();
     camera.matrixWorldInverse.getInverse(camera.matrixWorld);

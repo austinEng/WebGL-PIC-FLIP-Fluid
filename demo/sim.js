@@ -685,6 +685,74 @@ export default function (gl) {
                 }
             })()
 
+            var IPPprecondition = (function() {
+                var prog = gl.createProgram()
+
+                var vs = getShader(require('./shaders/quad-vert.glsl'), gl.VERTEX_SHADER);
+                var fs = getShader(require('./shaders/pressure-ipp-frag.glsl'), gl.FRAGMENT_SHADER);
+                addShaders(prog, [vs, fs])
+
+                var u_texLength = gl.getUniformLocation(prog, "u_texLength")
+                var u_count = gl.getUniformLocation(prog, "u_count")
+                var u_A = gl.getUniformLocation(prog, "u_A")
+                var u_types = gl.getUniformLocation(prog, "u_types")
+                var u_pcg = gl.getUniformLocation(prog, "u_pcg")
+
+                var u_setS = gl.getUniformLocation(prog, "u_setS")
+                var u_step = gl.getUniformLocation(prog, "u_step")
+
+                var v_pos = gl.getAttribLocation(prog, "v_pos")
+
+                return function(setS) {
+                    gl.useProgram(prog)
+
+                    gl.activeTexture(gl.TEXTURE0)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.P.tex)
+                    gl.uniform1i(u_A, 0)
+                    gl.activeTexture(gl.TEXTURE1)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.T.tex)
+                    gl.uniform1i(u_types, 1)
+
+                    gl.uniform1i(u_setS, setS)
+                    
+                    gl.uniform1i(u_texLength, grid.textureLength)
+                    gl.uniform3i(u_count, grid.count[0], grid.count[1], grid.count[2])
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, quad_vbo)
+                
+                    gl.enableVertexAttribArray(v_pos)
+                    gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 0, 0)
+                    gl.viewport(0, 0, grid.textureLength, grid.textureLength)
+
+                    gl.activeTexture(gl.TEXTURE2)
+                    gl.uniform1i(u_pcg, 2)
+
+                    var temp
+
+                    temp = grid.PCG1
+                    grid.PCG1 = grid.PCG2
+                    grid.PCG2 = temp
+
+                    gl.uniform1i(u_step, 0)
+                    gl.uniform1i(u_setS, 0)
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.PCG2.tex)
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+                    temp = grid.PCG1
+                    grid.PCG1 = grid.PCG2
+                    grid.PCG2 = temp
+
+                    gl.uniform1i(u_step, 1)
+                    gl.uniform1i(u_setS, 1)
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
+                    gl.bindTexture(gl.TEXTURE_2D, grid.PCG2.tex)
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+                    gl.disableVertexAttribArray(v_pos)
+                }
+            })()
+
             var preconditionZ = (function() {
                 
                 var prog = gl.createProgram();
@@ -1263,83 +1331,47 @@ export default function (gl) {
                 }
             })()
 
-            return function(t, shouldPrecondition) {
+            return function(t, settings) {
                 clearMatrices()
                 // setupA(t)
                 buildA()
                 setupb()
 
-                if (shouldPrecondition) {
-                    precondition()
-                    preconditionZ(true)
+                if (settings.precondition) {
+                    if (settings.ipp) {
+                        IPPprecondition(true) // set z = P-1 r, s = z
+                    } else {
+                        precondition()
+                        preconditionZ(true)
+                    }
                 }
                 
                 var buf = new Float32Array(4*grid.textureLength*grid.textureLength)
 
                 for (var i = 0; i < solverSteps; ++i) {
                     
-                    computeSigma(false, shouldPrecondition)
-                    
-                    // var sigma = 0.0;
-                    // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
-                    // gl.readPixels(0,0,grid.textureLength,grid.textureLength,gl.RGBA, gl.FLOAT, buf)
-                    // for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
-                    //     sigma += buf[4*j + 1] * buf[4*j + 2];
-                    // }
+                    computeSigma(false, settings.precondition) // compute z dot r
 
-                    // setZ()
                     clearZ()
-                    computeAs()
-                    computeAlpha()
-                    
-
-                    // var alphap = 0.0;
-                    // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
-                    // gl.readPixels(0,0,grid.textureLength,grid.textureLength,gl.RGBA, gl.FLOAT, buf)
-                    // for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
-                    //     alphap += buf[4*j + 2] * buf[4*j + 3];
-                    // }
-                    // alpha = sigma / alphap;
-                    // console.log('alpha:', sigma / alphap, sigma, alphap);
-
-                    // gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
-                    // gl.readPixels(0,0,2,2, gl.RGBA, gl.FLOAT, buf)
-                    // console.log('alpha:', buf[0] / buf[4], buf[0], buf[4])
+                    computeAs() // set z = As 
+                    computeAlpha() // compute z dot s
 
                     updateGuess()
-                    // break;
-                    // recomputeResidual()
 
-                    // var max = 0.0;
-                    // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
-                    // gl.readPixels(0,0,grid.textureLength,grid.textureLength,gl.RGBA, gl.FLOAT, buf)
-                    // for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
-                    //     var val = Math.abs(buf[4*j + 1]);
-                    //     if (val > max) max = val;
-                    // }
-                    // console.log(i, 'error:', max)
-
-                    if (shouldPrecondition) {
+                    if (settings.precondition) {
                         clearZ()
-                        preconditionZ(false)
+                        if (settings.ipp) {
+                            IPPprecondition(false)
+                        } else {
+                            preconditionZ(false)
+                        }
+                        
                     }
-                    computeSigma(true, shouldPrecondition)
-
-                    // var sigmanew = 0.0;
-                    // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
-                    // gl.readPixels(0,0,grid.textureLength,grid.textureLength,gl.RGBA, gl.FLOAT, buf)
-                    // for (var j = 0; j < grid.count[0]*grid.count[1]*grid.count[2]; ++j) {
-                    //     sigmanew += buf[4*j + 1] * buf[4*j + 2];
-                    // }
-                    // beta = sigmanew / sigma;
-                    // console.log('beta:', sigmanew / sigma, sigmanew, sigma)
-
-                    // gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
-                    // gl.readPixels(0,0,2,2, gl.RGBA, gl.FLOAT, buf)
-                    // console.log('beta:', buf[8] / buf[0], buf[8], buf[0])
+                    computeSigma(true, settings.precondition)
 
                     updateSearch()
                 }
+
                 // var max = 0.0;
                 // gl.bindFramebuffer(gl.FRAMEBUFFER, grid.PCG1.fbo)
                 // gl.readPixels(0,0,grid.textureLength,grid.textureLength,gl.RGBA, gl.FLOAT, buf)
@@ -1347,7 +1379,7 @@ export default function (gl) {
                 //     var val = Math.abs(buf[4*j + 1]);
                 //     if (val > max) max = val;
                 // }
-                // console.log('error:', max)
+                // console.log(i, 'error:', max)
 
                 velocityUpdate(t)
             }
@@ -1415,6 +1447,7 @@ export default function (gl) {
             var u_cellSize = gl.getUniformLocation(prog, "u_cellSize")
             var u_count = gl.getUniformLocation(prog, "u_count")
             var u_t = gl.getUniformLocation(prog, "u_t")
+            var u_smooth = gl.getUniformLocation(prog, "u_smooth")
 
             var v_id = gl.getAttribLocation(prog, "v_id")
 
@@ -1426,7 +1459,7 @@ export default function (gl) {
             gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
             gl.bindBuffer(gl.ARRAY_BUFFER, null)
 
-            return function(t) {
+            return function(t, smooth) {
                 gl.useProgram(prog)
                 
                 gl.bindFramebuffer(gl.FRAMEBUFFER, particles.B.fbo)
@@ -1443,6 +1476,8 @@ export default function (gl) {
                 gl.activeTexture(gl.TEXTURE2)
                 gl.bindTexture(gl.TEXTURE_2D, grid.old.tex)
                 gl.uniform1i(u_gOld, 2)
+
+                gl.uniform1f(u_smooth, smooth)
 
                 gl.uniform1i(u_particleTexLength, particles.textureLength)
                 gl.uniform1i(u_gridTexLength, grid.textureLength)
@@ -1522,7 +1557,7 @@ export default function (gl) {
         })()
 
         return {
-            step: function(t, shouldPrecondition) {
+            step: function(t, settings) {
                 gl.clearColor(0, 0, 0, 0.0);
                 gl.disable(gl.DEPTH_TEST)
 
@@ -1536,17 +1571,13 @@ export default function (gl) {
 
                 gravityUpdate(t);
 
-                enforceBoundary();
-
-                pressureSolve(t, shouldPrecondition);
-
-                enforceBoundary();
+                pressureSolve(t, settings);
 
                 extrapolateVelocity();
 
                 enforceBoundary();
 
-                updateVelocities(t);
+                updateVelocities(t, settings.smooth / 100);
 
                 updatePositions(t);
 

@@ -12,6 +12,7 @@ uniform int u_particleTexLength;
 uniform int u_gridTexLength;
 
 uniform float u_t;
+uniform float u_smooth;
 
 varying vec4 val;
 
@@ -63,7 +64,7 @@ void main() {
             gridComponentInterpolate(u_gOld, pos.rgb + velB * u_t * 0.5, u_min, -vec3(0.5,0.5,0), u_count, u_gridTexLength, u_cellSize, 2)
         );
 
-        val.rgb = 0.8 * (vel.rgb + (velA - velB)) + 0.2 * velA;
+        val.rgb = (1.0 - u_smooth) * (vel.rgb + (velA - velB)) + u_smooth * velA;
         // val.rgb = velA;
         val.a = vel.w;
         gl_Position = vec4(vUV * 2.0 - 1.0, 0.0, 1.0);

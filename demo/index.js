@@ -1,6 +1,6 @@
 'use strict'
 
-import _Compute from '../../lib'
+// import _Compute from '../../lib'
 import {_ParticleBuffer, BoxRegion} from './particles'
 import _MAC from './grid'
 import Bound from './bound'
@@ -18,60 +18,9 @@ const ext_tex_float = gl.getExtension("OES_texture_float")
 const {ParticlePainter, GridPainter} = Painters(gl)
 
 const ParticleBuffer = _ParticleBuffer(gl)
-const {ComputeBuffer, ComputeStorage, Computation} = _Compute(gl)
+
 const {MACGrid} = _MAC(gl)
 const {Sim} = _Sim(gl)
-
-var ParticleStorage = ComputeStorage({
-  format: [{
-    pos: 3,
-  }, {
-    vel: 3
-  }],
-  type: Float32Array,
-  dim: 3
-})
-
-var particleBufferA = ComputeBuffer({
-  storage: ParticleStorage,
-  dim: [10, 10, 10],
-  data: null
-})
-
-var particleBufferB = ComputeBuffer({
-  storage: ParticleStorage,
-  dim: [10, 10, 10],
-  data: null
-})
-
-particleBufferA.setData([{
-  pos: [1,5,6],
-  vel: [0,0,0]
-},
-{
-  pos: [2,1,3],
-  vel: [0,0,0]
-}])
-
-var gravityUpdate = Computation({
-  func: `particlesB[index].vel = particlesA[index].vel - 9.81*t`,
-  inputs: {
-    particlesA: ParticleStorage,
-    t: '1f'
-  },
-  outputs: {
-    particlesB: ParticleStorage
-  }
-})
-
-gravityUpdate.generate().setup({
-  inputs: {
-    particlesA: particleBufferA
-  },
-  outputs: {
-    particlesB: particleBufferB
-  }
-})
 
 
 var sim
@@ -109,11 +58,10 @@ var STEP_SIZE = 1 / 60;
 var drawloop = Loop(
   () => {
     return sim.shouldUpdate
-    // return true//renderer.isDirty()
   },
   (t) => {
     if (sim.shouldUpdate) {
-      sim.step(STEP_SIZE, simulationControls.precondition)
+      sim.step(STEP_SIZE, simulationControls)
     }
 
     gl.enable(gl.DEPTH_TEST)
@@ -163,12 +111,14 @@ var simulationControls = {
     drawloop.start()
   },
   step: function() {
-    sim.step(STEP_SIZE, simulationControls.precondition)
+    sim.step(STEP_SIZE, simulationControls)
     drawloop.start()
   },
   precondition: true,
-  density: 150000,  // particles per cubic meter
-  solverSteps: 50
+  ipp: true,
+  density: 500000,  // particles per cubic meter
+  solverSteps: 100,
+  smooth: 10
 }
 
 initialize(simulationControls)
@@ -178,6 +128,8 @@ var fluidSettings = gui.addFolder('Fluid')
 fluidSettings.add(simulationControls, 'density')
 fluidSettings.add(simulationControls, 'solverSteps', 1, 1000)
 fluidSettings.add(simulationControls, 'precondition')
+fluidSettings.add(simulationControls, 'ipp')
+fluidSettings.add(simulationControls, 'smooth', 0, 100)
 fluidSettings.open()
 var controls = gui.addFolder('Controls')
 controls.add(simulationControls, 'start')
@@ -201,23 +153,3 @@ display.add(gridPainter, 'drawz').onChange(drawloop.start)
 display.add(gridPainter, 'draws').onChange(drawloop.start)
 display.add(gridPainter, 'drawMIC').onChange(drawloop.start)
 display.open()
-
-/*
-import _CG from './cg'
-const CG = _CG(gl)
-
-var result = CG(gl)
-  .setup(4)
-  .setA([4,-1,-1,0, -1,4,0,-1, -1,0,4,-1, 0,-1,-1,4])
-  .setb([1,2,3,4])
-console.log(result)
-result = result
-  .print(result.A)
-  .print(result.b)
-  .solve()
-  .print(result.K1)
-  .print(result.K2)
-  .print(result.Minv)
-  .print(result.x)
-console.log(result)
-*/
