@@ -20,7 +20,7 @@ void main() {
 
   vec3 pos;
 
-  float scale = 0.2;
+  float scale = 0.05;
   ivec3 xyz = toXYZ(idx, u_count);
   if (u_g == 0) {
     pos = positionOf(xyz, u_min, u_cellSize) + vec3(0,0.5,0.5) * u_cellSize;
