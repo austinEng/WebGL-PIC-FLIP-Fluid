@@ -11,17 +11,19 @@ export default function(shouldUpdate, update) {
   
   function tick(total) {
     var elapsed = total - lastTime
-    frameStats.end()
+    
     lastTime = total;
 
     // execStats.begin()
+    frameStats.begin()
     update(elapsed)
+    frameStats.end()
     // execStats.end()
 
     if (shouldUpdate()) {
       running = true
       frameRequest = requestAnimationFrame(tick)
-      frameStats.begin()
+      
     } else {
       running = false
     }
@@ -30,7 +32,7 @@ export default function(shouldUpdate, update) {
   function start() {
     if (!running) {
       lastTime = 0
-      frameStats.begin()
+      // frameStats.begin()
       tick(0)
     }
   }
@@ -42,7 +44,7 @@ export default function(shouldUpdate, update) {
   return {
     tick: function() {
       if (!running) {
-        frameStats.begin()
+        // frameStats.begin()
         frameRequest = requestAnimationFrame(tick)
       }
     },

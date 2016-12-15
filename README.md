@@ -5,7 +5,8 @@ by [Austin Eng](http://austineng.github.io)
 1. [Overview](#overview)
 2. [Debug Views](#debug-views)
 3. [Techniques](#techniques)
-4. [Build & Running](#build)
+4. [Performance](#performance)
+5. [Build & Running](#build)
 
 ## Overview
 
@@ -88,6 +89,22 @@ Unfortunately, we need to take three dot products every iteration, which is not 
 
 The grid-to-particle transfer is much simpler than the particle-to-grid transfer. For this, we only need to compute our fractional grid cell index and then trilinear-ly interpolate our new updated velocity.
 
+## Performance
+
+**Tested on: Windows 10, i7-4770K @ 3.50GHz 16GB, GTX 780 3072MB**
+
+| Grid Density   | FPS (Incomplete Cholesky) | FPS (Incomplete Poisson) |
+|----------------|---------------------------|--------------------------|
+| 5,000          | 40                        | 60                       |
+| 10,000         | 30                        | 60                       |
+| 50,000         | 9                         | 33                       |
+| 100,000        | 3                         | 17                       |
+| 500,000        | 0.5                       | 6                        |
+| 1,000,000      | 0.2                       | 3                        |
+
+As we can see, using the Incomplete Poisson preconditioner has signficant performance benefits and is able to more effectively handle high grid resolutions.
+
+Keeping grid density constant but doubling particle density, these numbers are exactly the same, confirming that the limiting factor for performance is the pressure solve, which is bound by grid density.
 
 ## Build
 
