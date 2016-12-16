@@ -3,6 +3,7 @@
 import {vec3} from 'gl-matrix'
 
 export default function (gl) {
+  const {createComputeTexture} = require('./util')(gl)
 
   class MACGrid {
     constructor(bound, cellSize) {

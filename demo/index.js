@@ -116,7 +116,7 @@ var simulationControls = {
   },
   precondition: true,
   ipp: true,
-  density: 100000,  // particles per cubic meter
+  density: 10000,  // particles per cubic meter
   solverSteps: 100,
   smooth: 5
 }
