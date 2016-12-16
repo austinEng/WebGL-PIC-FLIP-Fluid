@@ -85,6 +85,10 @@ __Dot Products__
 Unfortunately, we need to take three dot products every iteration, which is not a very parallel operation. We once again take advantage of texture blending and using `gl.blend(gl.ONE, gl.ONE)` and write all products to the same UV coordinate to accumulate them.
 
 
+### Velocity Extrapolation
+
+In this step we extrapolate velocities to push the velocities one grid cell past the fluid cells. This is important so that particles don't lose energy when they come in contact with air cells. This is implemented in a fragment shader as a gather operation which does a few grid type checks in the cardinal directions and appropriately updates velocity.
+
 ### Grid-To-Particle
 
 The grid-to-particle transfer is much simpler than the particle-to-grid transfer. For this, we only need to compute our fractional grid cell index and then trilinear-ly interpolate our new updated velocity.
