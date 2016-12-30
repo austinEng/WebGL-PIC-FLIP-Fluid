@@ -50,23 +50,23 @@
 	
 	var _particles = __webpack_require__(1);
 	
-	var _grid = __webpack_require__(2);
+	var _grid = __webpack_require__(3);
 	
 	var _grid2 = _interopRequireDefault(_grid);
 	
-	var _bound = __webpack_require__(13);
+	var _bound = __webpack_require__(14);
 	
 	var _bound2 = _interopRequireDefault(_bound);
 	
-	var _renderer = __webpack_require__(14);
+	var _renderer = __webpack_require__(15);
 	
 	var _renderer2 = _interopRequireDefault(_renderer);
 	
-	var _loop = __webpack_require__(17);
+	var _loop = __webpack_require__(18);
 	
 	var _loop2 = _interopRequireDefault(_loop);
 	
-	var _painter = __webpack_require__(19);
+	var _painter = __webpack_require__(20);
 	
 	var _painter2 = _interopRequireDefault(_painter);
 	
@@ -83,9 +83,12 @@
 	var canvas = document.getElementById("canvas");
 	
 	var gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+	gl.webgl2 = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
 	
-	if (typeof WebGL2RenderingContext === "undefined" || !(gl instanceof WebGL2RenderingContext)) {
+	if (!gl.webgl2) {
 	  var ext_tex_float = gl.getExtension("OES_texture_float");
+	} else {
+	  var ext_color_buffer_float = gl.getExtension("EXT_color_buffer_float");
 	}
 	
 	var _Painters = (0, _painter2.default)(gl),
@@ -230,7 +233,7 @@
 
 /***/ },
 /* 1 */
-/***/ function(module, exports) {
+/***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 	
@@ -287,6 +290,9 @@
 	}
 	
 	function _ParticleBuffer(gl) {
+	  var _require = __webpack_require__(2)(gl),
+	      setupFramebufferTexture = _require.setupFramebufferTexture;
+	
 	  return function ParticleBuffer() {
 	    var particles = [];
 	
@@ -329,27 +335,8 @@
 	          fbo: gl.createFramebuffer()
 	        };
 	
-	        gl.bindTexture(gl.TEXTURE_2D, particleBuffer.A.tex);
-	        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, particleBuffer.textureLength, particleBuffer.textureLength, 0, gl.RGBA, gl.FLOAT, particleBuffer.buffer);
-	        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	        gl.bindTexture(gl.TEXTURE_2D, null);
-	        gl.bindFramebuffer(gl.FRAMEBUFFER, particleBuffer.A.fbo);
-	        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, particleBuffer.A.tex, 0);
-	        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	        gl.bindTexture(gl.TEXTURE_2D, particleBuffer.B.tex);
-	        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, particleBuffer.textureLength, particleBuffer.textureLength, 0, gl.RGBA, gl.FLOAT, particleBuffer.buffer);
-	        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	        gl.bindTexture(gl.TEXTURE_2D, null);
-	        gl.bindFramebuffer(gl.FRAMEBUFFER, particleBuffer.B.fbo);
-	        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, particleBuffer.B.tex, 0);
-	        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	        setupFramebufferTexture(particleBuffer.A.tex, particleBuffer.A.fbo, particleBuffer.textureLength, particleBuffer.textureLength, particleBuffer.buffer);
+	        setupFramebufferTexture(particleBuffer.B.tex, particleBuffer.B.fbo, particleBuffer.textureLength, particleBuffer.textureLength, particleBuffer.buffer);
 	
 	        particleBuffer.ids = gl.createBuffer();
 	        gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer.ids);
@@ -418,6 +405,63 @@
 
 /***/ },
 /* 2 */
+/***/ function(module, exports) {
+
+	'use strict';
+	
+	module.exports = function (gl) {
+	  function getShader(source, type) {
+	    var shader = gl.createShader(type);
+	    gl.shaderSource(shader, source);
+	    gl.compileShader(shader);
+	
+	    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+	      console.error("Could not compile shader!");
+	      console.error(source);
+	      console.error(gl.getShaderInfoLog(shader));
+	    }
+	    return shader;
+	  }
+	
+	  function addShaders(program, shaders) {
+	    for (var i = 0; i < shaders.length; ++i) {
+	      gl.attachShader(program, shaders[i]);
+	    }
+	
+	    gl.linkProgram(program);
+	
+	    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+	      console.error("Failed to link program");
+	      console.error(gl.getProgramInfoLog(program));
+	    }
+	  }
+	
+	  function setupFramebufferTexture(tex, fbo, width, height, buffer) {
+	    gl.bindTexture(gl.TEXTURE_2D, tex);
+	    if (gl.webgl2) {
+	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, buffer);
+	    } else {
+	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.FLOAT, buffer);
+	    }
+	    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	    gl.bindTexture(gl.TEXTURE_2D, null);
+	    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+	    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+	    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	  }
+	
+	  return {
+	    getShader: getShader,
+	    addShaders: addShaders,
+	    setupFramebufferTexture: setupFramebufferTexture
+	  };
+	};
+
+/***/ },
+/* 3 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -429,6 +473,9 @@
 	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 	
 	exports.default = function (gl) {
+	  var _require = __webpack_require__(2)(gl),
+	      setupFramebufferTexture = _require.setupFramebufferTexture;
+	
 	  var MACGrid = function () {
 	    function MACGrid(bound, cellSize) {
 	      _classCallCheck(this, MACGrid);
@@ -501,115 +548,16 @@
 	        fbo: this.B.fbo
 	      };
 	
-	      gl.bindTexture(gl.TEXTURE_2D, this.A.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.A.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.A.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.B.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.B.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.B.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.old.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.old.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.old.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.T.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.T.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.T.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.P.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.P.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.P.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.div.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.div.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.div.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.MIC1.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.MIC1.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.MIC1.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.MIC2.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.MIC2.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.MIC2.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.PCG1.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.PCG1.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.PCG1.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	      gl.bindTexture(gl.TEXTURE_2D, this.PCG2.tex);
-	      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.textureLength, this.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	      gl.bindTexture(gl.TEXTURE_2D, null);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, this.PCG2.fbo);
-	      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.PCG2.tex, 0);
-	      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	      setupFramebufferTexture(this.A.tex, this.A.fbo, this.textureLength, this.textureLength, null);
+	      setupFramebufferTexture(this.B.tex, this.B.fbo, this.textureLength, this.textureLength, null);
+	      setupFramebufferTexture(this.old.tex, this.old.fbo, this.textureLength, this.textureLength, null);
+	      setupFramebufferTexture(this.T.tex, this.T.fbo, this.textureLength, this.textureLength, null);
+	      setupFramebufferTexture(this.P.tex, this.P.fbo, this.textureLength, this.textureLength, null);
+	      setupFramebufferTexture(this.div.tex, this.div.fbo, this.textureLength, this.textureLength, null);
+	      setupFramebufferTexture(this.MIC1.tex, this.MIC1.fbo, this.textureLength, this.textureLength, null);
+	      setupFramebufferTexture(this.MIC2.tex, this.MIC2.fbo, this.textureLength, this.textureLength, null);
+	      setupFramebufferTexture(this.PCG1.tex, this.PCG1.fbo, this.textureLength, this.textureLength, null);
+	      setupFramebufferTexture(this.PCG2.tex, this.PCG2.fbo, this.textureLength, this.textureLength, null);
 	
 	      console.log(this);
 	    }
@@ -631,12 +579,12 @@
 	  };
 	};
 	
-	var _glMatrix = __webpack_require__(3);
+	var _glMatrix = __webpack_require__(4);
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 /***/ },
-/* 3 */
+/* 4 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/**
@@ -667,18 +615,18 @@
 	THE SOFTWARE. */
 	// END HEADER
 	
-	exports.glMatrix = __webpack_require__(4);
-	exports.mat2 = __webpack_require__(5);
-	exports.mat2d = __webpack_require__(6);
-	exports.mat3 = __webpack_require__(7);
-	exports.mat4 = __webpack_require__(8);
-	exports.quat = __webpack_require__(9);
-	exports.vec2 = __webpack_require__(12);
-	exports.vec3 = __webpack_require__(10);
-	exports.vec4 = __webpack_require__(11);
+	exports.glMatrix = __webpack_require__(5);
+	exports.mat2 = __webpack_require__(6);
+	exports.mat2d = __webpack_require__(7);
+	exports.mat3 = __webpack_require__(8);
+	exports.mat4 = __webpack_require__(9);
+	exports.quat = __webpack_require__(10);
+	exports.vec2 = __webpack_require__(13);
+	exports.vec3 = __webpack_require__(11);
+	exports.vec4 = __webpack_require__(12);
 
 /***/ },
-/* 4 */
+/* 5 */
 /***/ function(module, exports) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -754,7 +702,7 @@
 
 
 /***/ },
-/* 5 */
+/* 6 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -777,7 +725,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(4);
+	var glMatrix = __webpack_require__(5);
 	
 	/**
 	 * @class 2x2 Matrix
@@ -1196,7 +1144,7 @@
 
 
 /***/ },
-/* 6 */
+/* 7 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -1219,7 +1167,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(4);
+	var glMatrix = __webpack_require__(5);
 	
 	/**
 	 * @class 2x3 Matrix
@@ -1671,7 +1619,7 @@
 
 
 /***/ },
-/* 7 */
+/* 8 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -1694,7 +1642,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(4);
+	var glMatrix = __webpack_require__(5);
 	
 	/**
 	 * @class 3x3 Matrix
@@ -2423,7 +2371,7 @@
 
 
 /***/ },
-/* 8 */
+/* 9 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -2446,7 +2394,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(4);
+	var glMatrix = __webpack_require__(5);
 	
 	/**
 	 * @class 4x4 Matrix
@@ -4565,7 +4513,7 @@
 
 
 /***/ },
-/* 9 */
+/* 10 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -4588,10 +4536,10 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(4);
-	var mat3 = __webpack_require__(7);
-	var vec3 = __webpack_require__(10);
-	var vec4 = __webpack_require__(11);
+	var glMatrix = __webpack_require__(5);
+	var mat3 = __webpack_require__(8);
+	var vec3 = __webpack_require__(11);
+	var vec4 = __webpack_require__(12);
 	
 	/**
 	 * @class Quaternion
@@ -5171,7 +5119,7 @@
 
 
 /***/ },
-/* 10 */
+/* 11 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -5194,7 +5142,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(4);
+	var glMatrix = __webpack_require__(5);
 	
 	/**
 	 * @class 3 Dimensional Vector
@@ -5954,7 +5902,7 @@
 
 
 /***/ },
-/* 11 */
+/* 12 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -5977,7 +5925,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(4);
+	var glMatrix = __webpack_require__(5);
 	
 	/**
 	 * @class 4 Dimensional Vector
@@ -6569,7 +6517,7 @@
 
 
 /***/ },
-/* 12 */
+/* 13 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -6592,7 +6540,7 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE. */
 	
-	var glMatrix = __webpack_require__(4);
+	var glMatrix = __webpack_require__(5);
 	
 	/**
 	 * @class 2 Dimensional Vector
@@ -7162,7 +7110,7 @@
 
 
 /***/ },
-/* 13 */
+/* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -7173,7 +7121,7 @@
 	
 	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 	
-	var _glMatrix = __webpack_require__(3);
+	var _glMatrix = __webpack_require__(4);
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 	
@@ -7204,7 +7152,7 @@
 	exports.default = Bound;
 
 /***/ },
-/* 14 */
+/* 15 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -7213,8 +7161,8 @@
 	  value: true
 	});
 	exports.default = Renderer;
-	var THREE = __webpack_require__(15);
-	var OrbitControls = __webpack_require__(16)(THREE);
+	var THREE = __webpack_require__(16);
+	var OrbitControls = __webpack_require__(17)(THREE);
 	
 	function Camera(canvas) {
 	  var camera = new THREE.PerspectiveCamera(10, canvas.width / canvas.height, 0.1, 1000);
@@ -7300,7 +7248,7 @@
 	}
 
 /***/ },
-/* 15 */
+/* 16 */
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
@@ -49603,7 +49551,7 @@
 
 
 /***/ },
-/* 16 */
+/* 17 */
 /***/ function(module, exports) {
 
 	module.exports = function(THREE) {
@@ -50728,7 +50676,7 @@
 
 
 /***/ },
-/* 17 */
+/* 18 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -50789,14 +50737,14 @@
 	  };
 	};
 	
-	var _statsJs = __webpack_require__(18);
+	var _statsJs = __webpack_require__(19);
 	
 	var _statsJs2 = _interopRequireDefault(_statsJs);
 
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /***/ },
-/* 18 */
+/* 19 */
 /***/ function(module, exports) {
 
 	// stats.js - http://github.com/mrdoob/stats.js
@@ -50808,7 +50756,7 @@
 
 
 /***/ },
-/* 19 */
+/* 20 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -50817,13 +50765,13 @@
 	  value: true
 	});
 	
-	var _glMatrix = __webpack_require__(3);
+	var _glMatrix = __webpack_require__(4);
 	
-	var THREE = __webpack_require__(15);
+	var THREE = __webpack_require__(16);
 	
 	
 	function Painters(gl) {
-	  var _require = __webpack_require__(20)(gl),
+	  var _require = __webpack_require__(2)(gl),
 	      getShader = _require.getShader,
 	      addShaders = _require.addShaders;
 	
@@ -51220,45 +51168,6 @@
 	exports.default = Painters;
 
 /***/ },
-/* 20 */
-/***/ function(module, exports) {
-
-	'use strict';
-	
-	module.exports = function (gl) {
-	  function getShader(source, type) {
-	    var shader = gl.createShader(type);
-	    gl.shaderSource(shader, source);
-	    gl.compileShader(shader);
-	
-	    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-	      console.error("Could not compile shader!");
-	      console.error(source);
-	      console.error(gl.getShaderInfoLog(shader));
-	    }
-	    return shader;
-	  }
-	
-	  function addShaders(program, shaders) {
-	    for (var i = 0; i < shaders.length; ++i) {
-	      gl.attachShader(program, shaders[i]);
-	    }
-	
-	    gl.linkProgram(program);
-	
-	    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-	      console.error("Failed to link program");
-	      console.error(gl.getProgramInfoLog(program));
-	    }
-	  }
-	
-	  return {
-	    getShader: getShader,
-	    addShaders: addShaders
-	  };
-	};
-
-/***/ },
 /* 21 */
 /***/ function(module, exports) {
 
@@ -51305,9 +51214,10 @@
 	});
 	
 	exports.default = function (gl) {
-	    var _require = __webpack_require__(20)(gl),
+	    var _require = __webpack_require__(2)(gl),
 	        getShader = _require.getShader,
-	        addShaders = _require.addShaders;
+	        addShaders = _require.addShaders,
+	        setupFramebufferTexture = _require.setupFramebufferTexture;
 	
 	    var quad_vbo = function () {
 	        var buffer = gl.createBuffer();
@@ -51376,16 +51286,7 @@
 	                fbo: gl.createFramebuffer()
 	            };
 	
-	            gl.bindTexture(gl.TEXTURE_2D, counts.tex);
-	            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	            gl.bindTexture(gl.TEXTURE_2D, null);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, counts.fbo);
-	            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, counts.tex, 0);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	            setupFramebufferTexture(counts.tex, counts.fbo, grid.textureLength, grid.textureLength, null);
 	
 	            return function () {
 	
@@ -51696,27 +51597,8 @@
 	                fbo: gl.createFramebuffer()
 	            };
 	
-	            gl.bindTexture(gl.TEXTURE_2D, tempTex.tex);
-	            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.FLOAT, null);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	            gl.bindTexture(gl.TEXTURE_2D, null);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo);
-	            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempTex.tex, 0);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	            gl.bindTexture(gl.TEXTURE_2D, tempTex2.tex);
-	            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.FLOAT, null);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	            gl.bindTexture(gl.TEXTURE_2D, null);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex2.fbo);
-	            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempTex2.tex, 0);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	            setupFramebufferTexture(tempTex.tex, tempTex.fbo, 2, 2, null);
+	            setupFramebufferTexture(tempTex2.tex, tempTex2.fbo, 2, 2, null);
 	
 	            var q1 = {
 	                tex: gl.createTexture(),
@@ -51728,27 +51610,8 @@
 	                fbo: gl.createFramebuffer()
 	            };
 	
-	            gl.bindTexture(gl.TEXTURE_2D, q1.tex);
-	            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	            gl.bindTexture(gl.TEXTURE_2D, null);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, q1.fbo);
-	            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, q1.tex, 0);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	
-	            gl.bindTexture(gl.TEXTURE_2D, q2.tex);
-	            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	            gl.bindTexture(gl.TEXTURE_2D, null);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, q2.fbo);
-	            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, q2.tex, 0);
-	            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	            setupFramebufferTexture(q1.tex, q1.fbo, grid.textureLength, grid.textureLength, null);
+	            setupFramebufferTexture(q2.tex, q2.fbo, grid.textureLength, grid.textureLength, null);
 	
 	            var alpha;
 	            var beta;
@@ -52889,7 +52752,7 @@
 	    };
 	};
 	
-	var _glMatrix = __webpack_require__(3);
+	var _glMatrix = __webpack_require__(4);
 
 /***/ },
 /* 28 */
