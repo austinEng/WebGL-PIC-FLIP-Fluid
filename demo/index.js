@@ -13,9 +13,12 @@ import DAT from 'dat-gui'
 const canvas = document.getElementById("canvas");
 
 const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
+gl.webgl2 = (typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext)
 
-if (typeof WebGL2RenderingContext === "undefined" || !(gl instanceof WebGL2RenderingContext)) {
+if (!gl.webgl2) {
   const ext_tex_float = gl.getExtension("OES_texture_float")
+} else {
+  const ext_color_buffer_float = gl.getExtension("EXT_color_buffer_float")
 }
 
 const {ParticlePainter, GridPainter} = Painters(gl)
