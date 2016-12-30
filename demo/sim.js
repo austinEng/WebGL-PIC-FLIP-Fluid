@@ -3,7 +3,7 @@
 import {vec3} from 'gl-matrix'
 
 export default function (gl) {
-    const {getShader, addShaders} = require('./util')(gl)
+    const {getShader, addShaders, setupFramebufferTexture} = require('./util')(gl)
 
     var quad_vbo = (function(){
         var buffer = gl.createBuffer()
@@ -78,16 +78,7 @@ export default function (gl) {
                 fbo: gl.createFramebuffer()
             }
 
-            gl.bindTexture(gl.TEXTURE_2D, counts.tex)
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-            gl.bindTexture(gl.TEXTURE_2D, null)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, counts.fbo)
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, counts.tex, 0)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+            setupFramebufferTexture(counts.tex, counts.fbo, grid.textureLength, grid.textureLength, null)
 
             return function() {
 
@@ -400,27 +391,8 @@ export default function (gl) {
                 fbo: gl.createFramebuffer()
             }
 
-            gl.bindTexture(gl.TEXTURE_2D, tempTex.tex)
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.FLOAT, null)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-            gl.bindTexture(gl.TEXTURE_2D, null)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex.fbo)
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempTex.tex, 0)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-
-            gl.bindTexture(gl.TEXTURE_2D, tempTex2.tex)
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.FLOAT, null)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-            gl.bindTexture(gl.TEXTURE_2D, null)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, tempTex2.fbo)
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempTex2.tex, 0)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+            setupFramebufferTexture(tempTex.tex, tempTex.fbo, 2, 2, null)
+            setupFramebufferTexture(tempTex2.tex, tempTex2.fbo, 2, 2, null)
 
             var q1 = {
                 tex: gl.createTexture(),
@@ -432,27 +404,8 @@ export default function (gl) {
                 fbo: gl.createFramebuffer()
             }
 
-            gl.bindTexture(gl.TEXTURE_2D, q1.tex)
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-            gl.bindTexture(gl.TEXTURE_2D, null)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, q1.fbo)
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, q1.tex, 0)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-
-            gl.bindTexture(gl.TEXTURE_2D, q2.tex)
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, grid.textureLength, grid.textureLength, 0, gl.RGBA, gl.FLOAT, null)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-            gl.bindTexture(gl.TEXTURE_2D, null)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, q2.fbo)
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, q2.tex, 0)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+            setupFramebufferTexture(q1.tex, q1.fbo, grid.textureLength, grid.textureLength, null)
+            setupFramebufferTexture(q2.tex, q2.fbo, grid.textureLength, grid.textureLength, null)
 
             var alpha;
             var beta;

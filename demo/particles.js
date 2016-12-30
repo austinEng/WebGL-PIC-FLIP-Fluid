@@ -27,6 +27,9 @@ function Particle(i, buffer) {
 }
 
 export function _ParticleBuffer(gl) {
+
+  const {setupFramebufferTexture} = require('./util')(gl)
+
   return function ParticleBuffer() {
     var particles = []
 
@@ -69,27 +72,8 @@ export function _ParticleBuffer(gl) {
           fbo: gl.createFramebuffer()
         }
 
-        gl.bindTexture(gl.TEXTURE_2D, particleBuffer.A.tex)
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, particleBuffer.textureLength, particleBuffer.textureLength, 0, gl.RGBA, gl.FLOAT, particleBuffer.buffer)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-        gl.bindTexture(gl.TEXTURE_2D, null)
-        gl.bindFramebuffer(gl.FRAMEBUFFER, particleBuffer.A.fbo)
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, particleBuffer.A.tex, 0)
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-
-        gl.bindTexture(gl.TEXTURE_2D, particleBuffer.B.tex)
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, particleBuffer.textureLength, particleBuffer.textureLength, 0, gl.RGBA, gl.FLOAT, particleBuffer.buffer)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-        gl.bindTexture(gl.TEXTURE_2D, null)
-        gl.bindFramebuffer(gl.FRAMEBUFFER, particleBuffer.B.fbo)
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, particleBuffer.B.tex, 0)
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+        setupFramebufferTexture(particleBuffer.A.tex, particleBuffer.A.fbo, particleBuffer.textureLength, particleBuffer.textureLength, particleBuffer.buffer)
+        setupFramebufferTexture(particleBuffer.B.tex, particleBuffer.B.fbo, particleBuffer.textureLength, particleBuffer.textureLength, particleBuffer.buffer)
 
         particleBuffer.ids = gl.createBuffer()
         gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer.ids)
